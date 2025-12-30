@@ -1,24 +1,24 @@
 # Financial MCP Server
 
-A specialized Model Context Protocol (MCP) server for financial market data analysis and trade setup generation. This server aggregates data from multiple providers (Alpaca, Polygon, FMP, Finnhub), runs a screening and enrichment pipeline, and outputs ranked trade setups.
+A comprehensive Financial Model Context Protocol (MCP) server that provides AI agents with professional-grade stock market analysis capabilities.
 
 ## Features
 
-*   **Multi-Provider Support:** Integrates with Alpaca, Polygon, Financial Modeling Prep (FMP), and Finnhub.
-*   **Resilient Routing:** Automatically falls back to alternative providers or mock data if primary providers fail.
-*   **Smart Screening:** Filters stocks based on price, volume, sector, and market cap. Falls back to in-memory filtering if the provider doesn't support native screening.
-*   **Technical Analysis:** Calculates intraday indicators (VWAP, RSI, MACD, Bollinger Bands, ATR) and EOD metrics (SMA50, SMA200).
-*   **Orchestration Pipeline:** "Plan and Run" tool automates the entire flow: Discovery -> Filtering -> Enrichment -> Ranking.
-*   **Caching:** Built-in Redis caching for market data to reduce API calls and latency.
-*   **Secure Connection Management:** Web-based UI for managing API keys and connections securely.
+- **Intelligent Screening**: Filter stocks based on technical and fundamental criteria (Price, Volume, Sector, Market Cap).
+- **Multi-Provider Support**: Seamlessly integrates with Alpaca, Polygon.io, Financial Modeling Prep (FMP), and Finnhub.
+- **Advanced Analysis**: Calculates RSI, MACD, Bollinger Bands, and SMA.
+- **Sentiment Analysis**: Analyzes news sentiment using Finnhub.
+- **Trade Setup Ranking**: Ranks opportunities based on a weighted scoring system.
+- **Secure Authentication**: End-to-end redirect-based authentication flow.
+- **Docker Ready**: Easy deployment with Docker and Docker Compose.
 
 ## Prerequisites
 
-*   Node.js (v18 or higher)
-*   PostgreSQL (for connection/session storage)
-*   Redis (for caching and auth flow)
+- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
+- API Keys for at least one provider (Alpaca, Polygon, FMP, or Finnhub)
+- `MASTER_KEY` (32-byte hex string) for credential encryption
 
-## Installation
+## Quick Start (Local Docker Deployment)
 
 1.  **Clone the repository:**
     ```bash
@@ -26,75 +26,99 @@ A specialized Model Context Protocol (MCP) server for financial market data anal
     cd financial-mcp-server
     ```
 
-2.  **Install dependencies:**
+2.  **Generate a Master Key:**
+    You can generate a secure 32-byte hex key using OpenSSL:
     ```bash
-    npm install
+    openssl rand -hex 32
     ```
 
-3.  **Environment Setup:**
-    Create a `.env` file in the root directory:
+3.  **Create `.env` file (Optional but recommended):**
+    Create a `.env` file in the root directory to store your secrets.
     ```env
-    DATABASE_URL="postgresql://user:password@localhost:5432/financial_mcp"
-    REDIS_URL="redis://localhost:6379"
-    PORT=3000
+    MASTER_KEY=your_generated_hex_key_here
+    # Optional default provider keys (can also be configured via UI)
+    ALPACA_API_KEY=...
+    ALPACA_SECRET_KEY=...
+    POLYGON_API_KEY=...
     ```
-    *   `DATABASE_URL`: Connection string for your PostgreSQL database.
-    *   `REDIS_URL`: Connection string for Redis.
-    *   `PORT`: Port for the HTTP server (default: 3000).
 
-4.  **Database Migration:**
+4.  **Run with Docker Compose:**
     ```bash
-    npm run postinstall
-    # If using Prisma Migrate in the future:
-    # npx prisma migrate dev
-    # For now, `prisma db push` is often sufficient for dev:
-    npx prisma db push
+    export MASTER_KEY=your_generated_hex_key_here # If not in .env
+    docker compose up --build
     ```
 
-## Running the Server
+5.  **Access the UI:**
+    Open your browser and navigate to `http://localhost:3000`.
 
-### Development Mode
-```bash
-npm start
-```
-The server will start on port 3000 (or the port specified in `.env`).
+## Configuration via UI
 
-### MCP Connection
-You can connect to this server using any MCP client (e.g., Claude Desktop, specialized IDE plugins).
+1.  Go to `http://localhost:3000`.
+2.  Fill in the "Create New Connection" form.
+3.  Enter a name (e.g., "My Portfolio") and your API keys.
+4.  Click "Create Connection".
+5.  Once created, click "Generate Token" to get a session token for your AI agent.
 
-**SSE Transport:**
-Endpoint: `http://localhost:3000/mcp`
+## Authentication Flow
 
-To secure the connection, use the Web UI at `http://localhost:3000` to create a Connection and Session. The UI will provide you with the full SSE URL including the Session ID and the Authorization header.
+This server supports a redirect-based authentication flow, ideal for integrating with third-party MCP clients.
 
-## Architecture
+1.  **Initiate Auth**: Point your browser or client to:
+    ```
+    http://localhost:3000?callback_url=https://your-client-app.com/callback
+    ```
+2.  **Authorize**: The UI will show an "Authorize & Connect" button instead of "Generate Token".
+3.  **Redirect**: Upon clicking, the server validates the request and redirects to your `callback_url` with a one-time authorization `code` and the original `state`.
+    ```
+    https://your-client-app.com/callback?code=AUTH_CODE&state=STATE
+    ```
+4.  **Exchange Token**: Your client application exchanges the `code` for a session token via `POST /api/token`.
 
-The system is built around a central **Orchestrator** that executes a pipeline:
+## Reverse Proxy Setup (Nginx Proxy Manager)
 
-1.  **Discovery:** Finds potential candidates (e.g., top gainers/losers) using the `SmartScreener`.
-2.  **Filtering:** Removes untradeable assets (low price, wide spreads).
-3.  **Enrichment:** Fetches detailed data:
-    *   **Intraday:** 1-minute bars for VWAP, RSI, MACD.
-    *   **Context:** Company profile, sector, market cap.
-    *   **EOD:** Daily bars for long-term averages (SMA).
-4.  **Ranking:** Scores the candidates based on technical setups (Trend, Reversion, Momentum) and produces a confidence score.
+This server is designed to work seamlessly behind a reverse proxy like Nginx Proxy Manager (NPM).
 
-## Available MCP Tools
+### Requirements
+- **Websockets/SSE**: The MCP protocol uses Server-Sent Events (SSE), which requires specific headers and timeout settings.
+- **Headers**: `X-Accel-Buffering: no` is handled by the application, but you must ensure your proxy supports long-lived connections.
 
-*   `plan_and_run`: Execute the full analysis pipeline.
-    *   `intent`: 'day_trade', 'swing', 'long_term'
-*   `discover_candidates`: Find potential stocks based on criteria.
-*   `filter_tradeable`: Check list of symbols for tradeability.
-*   `enrich_intraday`: Get technical indicators (RSI, VWAP, etc.).
-*   `enrich_context`: Get fundamental data (Sector, Market Cap).
-*   `enrich_eod`: Get daily moving averages.
-*   `rank_setups`: Score and rank a list of enriched symbols.
-*   `get_quotes`: Fetch real-time quotes.
-*   `explain_routing`: Debug current provider configuration.
+### Nginx Proxy Manager Configuration
 
-## Testing
+1.  **Add Proxy Host**:
+    - **Domain Names**: `mcp.yourdomain.com`
+    - **Scheme**: `http`
+    - **Forward Hostname / IP**: `financial-mcp-app` (container name) or your host IP.
+    - **Forward Port**: `3000`
+    - **Block Common Exploits**: Enabled (Optional)
+    - **Websockets Support**: **Enabled** (Required)
 
-Run the test suite:
-```bash
-npm test
-```
+2.  **Custom Locations (Optional)**:
+    - If you are deploying under a subpath (e.g., `yourdomain.com/mcp/`), ensure you strip the path prefix if the app expects root, or rely on the relative path support in the UI. *Note: Subpath deployment is supported by the UI using relative paths (`./api`), but root domain deployment is recommended for simplicity.*
+
+3.  **SSL/TLS**:
+    - Enable SSL via Let's Encrypt in the "SSL" tab.
+    - Force SSL: Enabled.
+
+4.  **Advanced Configuration**:
+    - If you encounter buffering issues (events not arriving immediately), add this to the "Advanced" tab:
+      ```nginx
+      proxy_set_header X-Accel-Buffering no;
+      proxy_read_timeout 86400s;
+      proxy_send_timeout 86400s;
+      ```
+
+## API Endpoints
+
+- `GET /api/connections`: List all connections.
+- `POST /api/connections`: Create a new connection.
+- `POST /api/authorize`: Start OAuth-like flow.
+- `POST /api/token`: Exchange auth code for token.
+- `GET /mcp`: The SSE endpoint for MCP agents.
+
+## Development
+
+- **Install**: `npm install`
+- **Build**: `npm run build`
+- **Test**: `npm test`
+- **Local Database**: The `docker-compose.yml` includes Postgres and Redis. Ensure you have them running for local dev without Docker.
+

@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+const API_BASE = './api';
 
 // Parse URL params
 const urlParams = new URLSearchParams(window.location.search);

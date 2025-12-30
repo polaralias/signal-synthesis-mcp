@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import crypto from 'crypto';
 import path from 'path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -302,6 +303,16 @@ export class FinancialServer {
 
     if (port) {
       const app = express();
+
+      // Trust proxy for correct protocol/IP handling behind reverse proxies
+      app.set('trust proxy', true);
+
+      // Enable CORS
+      app.use(cors({
+        origin: true, // Reflect the request origin
+        credentials: true
+      }));
+
       const transports = new Map<string, SSEServerTransport>();
 
       // Mount API routes
@@ -311,6 +322,12 @@ export class FinancialServer {
       app.use(express.static(path.join(__dirname, '../public')));
 
       app.get('/mcp', async (req, res) => {
+        // Set headers for SSE to avoid buffering
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no'); // Crucial for Nginx
+
         // Authenticate Session
         let token = req.query.token as string;
         if (!token && req.headers.authorization) {
