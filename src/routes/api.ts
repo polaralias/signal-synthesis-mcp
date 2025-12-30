@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { ConnectionManager } from '../models/connection';
 import { prisma } from '../services/database';
+import { AuthFlow } from '../services/auth-flow';
 
 const router = express.Router();
 
@@ -96,6 +97,73 @@ router.post('/connections/:id/sessions', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to create session' });
+  }
+});
+
+// --- Authorization Flow ---
+
+// Step 1: Authorize connection and get redirect URL
+router.post('/authorize', async (req, res) => {
+  const schema = z.object({
+    connectionId: z.string().uuid(),
+    callbackUrl: z.string().url(),
+    state: z.string().min(1)
+  });
+
+  try {
+    const { connectionId, callbackUrl, state } = schema.parse(req.body);
+    
+    // Create session
+    const { session, token } = await ConnectionManager.createSession(connectionId);
+    
+    // Generate short-lived auth code
+    const code = await AuthFlow.generateAuthCode({ 
+      sessionId: session.id, 
+      token 
+    });
+    
+    // Construct redirect URL
+    const url = new URL(callbackUrl);
+    url.searchParams.set('code', code);
+    url.searchParams.set('state', state);
+    
+    res.json({ redirectUrl: url.toString() });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: error.errors });
+    } else {
+      console.error(error);
+      res.status(500).json({ error: 'Failed to authorize connection' });
+    }
+  }
+});
+
+// Step 2: Exchange code for token
+router.post('/token', async (req, res) => {
+  const schema = z.object({
+    code: z.string().min(1)
+  });
+
+  try {
+    const { code } = schema.parse(req.body);
+    
+    const sessionData = await AuthFlow.exchangeAuthCode(code);
+    
+    if (!sessionData) {
+      return res.status(401).json({ error: 'Invalid or expired authorization code' });
+    }
+    
+    res.json({
+      sessionId: sessionData.sessionId,
+      token: sessionData.token
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: error.errors });
+    } else {
+      console.error(error);
+      res.status(500).json({ error: 'Failed to exchange token' });
+    }
   }
 });
 
