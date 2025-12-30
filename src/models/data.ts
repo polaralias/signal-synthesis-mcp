@@ -67,6 +67,15 @@ export const NewsItemSchema = z.object({
 });
 export type NewsItem = z.infer<typeof NewsItemSchema>;
 
+export const SentimentDataSchema = z.object({
+  symbol: z.string(),
+  score: z.number(), // -1.0 to 1.0 (Negative to Positive)
+  label: z.enum(['Bearish', 'Somewhat Bearish', 'Neutral', 'Somewhat Bullish', 'Bullish']),
+  source: z.string(), // "Finnhub News", "Twitter", etc.
+  confidence: z.number().optional(),
+});
+export type SentimentData = z.infer<typeof SentimentDataSchema>;
+
 export const TradeSetupSchema = z.object({
   symbol: z.string(),
   setupType: z.string(), // e.g., "ORB", "Pullback"

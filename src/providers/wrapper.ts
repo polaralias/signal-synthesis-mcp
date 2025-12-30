@@ -1,5 +1,5 @@
 import { MarketDataProvider, ContextDataProvider } from '../interfaces/index';
-import { Quote, Bar, MarketSnapshot, CompanyProfile, NewsItem } from '../models/data';
+import { Quote, Bar, MarketSnapshot, CompanyProfile, NewsItem, SentimentData } from '../models/data';
 import { HealthMonitor } from '../routing/health';
 
 export class CircuitOpenError extends Error {
@@ -78,5 +78,9 @@ export class ResilientContextDataProvider implements ContextDataProvider {
 
   async getNews(symbols: string[], limit?: number): Promise<Record<string, NewsItem[]>> {
     return this.execute(() => this.inner.getNews(symbols, limit));
+  }
+
+  async getSentiment(symbol: string): Promise<SentimentData> {
+    return this.execute(() => this.inner.getSentiment(symbol));
   }
 }

@@ -53,6 +53,18 @@ export function rankSetups(
         }
     }
 
+    // 3b. Sentiment Analysis
+    if (context && context.sentiment) {
+        const sentimentScore = context.sentiment.score; // -1 to 1
+        if (sentimentScore > 0.2) {
+            score += sentimentScore * 1.5; // Max 1.5 bonus
+            reasoning.push(`Positive Sentiment (${context.sentiment.label})`);
+        } else if (sentimentScore < -0.2) {
+            score += sentimentScore * 1.5; // Max 1.5 penalty
+            reasoning.push(`Negative Sentiment (${context.sentiment.label})`);
+        }
+    }
+
     // 4. Momentum Indicators (RSI & MACD)
     if (stats.rsi) {
         if (stats.rsi < 30) {
