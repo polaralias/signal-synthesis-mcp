@@ -4,6 +4,7 @@ import { filterTradeable } from './filters';
 import { enrichIntraday, enrichContext, enrichEod, EodStats } from './enrichment';
 import { rankSetups } from './ranking';
 import { TradeSetup } from '../models/data';
+import { prisma } from '../services/database';
 
 export interface PlanResult {
   intent: string;
@@ -60,6 +61,30 @@ export async function planAndRun(
   console.log(`[Orchestrator] Ranking setups...`);
 
   const setups = rankSetups(intradayData, contextData, eodData);
+
+  // 5. Persistence
+  if (setups.length > 0) {
+    console.log(`[Orchestrator] Persisting ${setups.length} setups to database...`);
+    try {
+      await prisma.tradeSetup.createMany({
+        data: setups.map(s => ({
+          symbol: s.symbol,
+          setupType: s.setupType,
+          triggerPrice: s.triggerPrice,
+          stopLoss: s.stopLoss,
+          targetPrice: s.targetPrice || null,
+          confidence: s.confidence,
+          reasoning: s.reasoning,
+          validUntil: s.validUntil,
+          intent: intent
+        }))
+      });
+      console.log(`[Orchestrator] Successfully saved setups.`);
+    } catch (error) {
+      console.error(`[Orchestrator] Failed to save setups:`, error);
+      // We don't throw here to ensure we return the result even if persistence fails
+    }
+  }
 
   return {
     intent,
