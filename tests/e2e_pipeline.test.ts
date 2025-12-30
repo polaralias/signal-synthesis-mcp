@@ -4,6 +4,15 @@ import { MarketDataProvider } from '../src/interfaces/market-data';
 import { ContextDataProvider } from '../src/interfaces/context-data';
 import { MarketSnapshot, Bar, CompanyProfile, FinancialMetrics, SentimentData } from '../src/models/data';
 
+// Mock database service
+jest.mock('../src/services/database', () => ({
+  prisma: {
+    tradeSetup: {
+      createMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+  },
+}));
+
 // Mock Provider Implementation
 class MockTestProvider implements MarketDataProvider, ContextDataProvider {
   // Market Data

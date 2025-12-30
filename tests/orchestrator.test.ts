@@ -1,6 +1,15 @@
 import { Router } from '../src/routing/index.js';
 import { planAndRun } from '../src/tools/orchestrator.js';
 
+// Mock database service
+jest.mock('../src/services/database', () => ({
+  prisma: {
+    tradeSetup: {
+      createMany: jest.fn().mockResolvedValue({ count: 2 }),
+    },
+  },
+}));
+
 // Mock Router to force Mock Provider usage
 jest.mock('../src/routing/index.js', () => {
   return {

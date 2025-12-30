@@ -9,9 +9,10 @@ import { z } from 'zod';
 import { Router } from './routing/index';
 import { discoverCandidates } from './tools/discovery';
 import { filterTradeable } from './tools/filters';
-import { enrichIntraday, enrichContext } from './tools/enrichment';
+import { enrichIntraday, enrichContext, enrichEod } from './tools/enrichment';
 import { rankSetups } from './tools/ranking';
 import { planAndRun } from './tools/orchestrator';
+import { explainRouting } from './tools/debug';
 
 export class McpCore {
   private server: Server;
@@ -137,6 +138,29 @@ export class McpCore {
           },
         },
         {
+          name: 'enrich_eod',
+          description: 'Enrich symbols with End-of-Day data (SMA, etc.)',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              symbols: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'List of symbols',
+              },
+            },
+            required: ['symbols'],
+          },
+        },
+        {
+          name: 'explain_routing',
+          description: 'Debug tool to explain current routing configuration',
+          inputSchema: {
+            type: 'object',
+            properties: {},
+          },
+        },
+        {
           name: 'rank_setups',
           description: 'Rank trade setups based on technicals',
           inputSchema: {
@@ -149,6 +173,10 @@ export class McpCore {
               contextData: {
                 type: 'object',
                 description: 'JSON object of ContextData keyed by symbol',
+              },
+              eodData: {
+                type: 'object',
+                description: 'JSON object of EodStats keyed by symbol',
               },
             },
             required: ['intradayData'],
@@ -215,13 +243,28 @@ export class McpCore {
         return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
       }
 
+      if (name === 'enrich_eod') {
+        const schema = z.object({
+          symbols: z.array(z.string()),
+        });
+        const { symbols } = schema.parse(args);
+        const results = await enrichEod(this.router, symbols);
+        return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+      }
+
+      if (name === 'explain_routing') {
+         const results = explainRouting(this.router);
+         return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+      }
+
       if (name === 'rank_setups') {
          const schema = z.object({
              intradayData: z.record(z.any()),
              contextData: z.record(z.any()).optional().default({}),
+             eodData: z.record(z.any()).optional().default({}),
          });
-         const { intradayData, contextData } = schema.parse(args);
-         const results = rankSetups(intradayData, contextData);
+         const { intradayData, contextData, eodData } = schema.parse(args);
+         const results = rankSetups(intradayData, contextData, eodData);
          return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
       }
 
