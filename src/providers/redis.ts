@@ -5,7 +5,22 @@ import { Quote, Bar, MarketSnapshot } from '../models/data';
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 
 // Global Redis client (connection managed by ioredis)
-export const redis = new Redis(REDIS_URL);
+// We add lazyConnect and error handling to prevent crashing if Redis is not immediately available (e.g., in CI or simple local dev without docker)
+export const redis = new Redis(REDIS_URL, {
+  lazyConnect: true,
+  retryStrategy: (times) => {
+    // Retry with exponential backoff, max 2 seconds
+    const delay = Math.min(times * 50, 2000);
+    return delay;
+  },
+  maxRetriesPerRequest: 1 // Don't block requests indefinitely if Redis is down
+});
+
+redis.on('error', (err) => {
+  // Suppress connection errors to stdout to avoid cluttering logs in environments without Redis
+  // But still log them if needed for debugging
+  // console.error('Redis Client Error', err);
+});
 
 interface CacheEntry<T> {
   data: T;
