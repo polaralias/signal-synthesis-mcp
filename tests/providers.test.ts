@@ -129,6 +129,7 @@ describe('PolygonProvider', () => {
   });
 
   it('should fetch movers', async () => {
+    // Mock gainers call
     (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -139,10 +140,23 @@ describe('PolygonProvider', () => {
         })
     });
 
-    const movers = await provider.getMovers();
-    expect(movers).toHaveLength(1);
-    expect(movers[0].symbol).toBe('AAPL');
-    expect(movers[0].changePercent).toBe(5);
+    // Mock losers call
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+          status: 'OK',
+          tickers: [
+              { ticker: 'TSLA', day: { c: 200, v: 2000 }, todaysChangePerc: -5 }
+          ]
+      })
+    });
+
+    const movers = await provider.getMovers(20);
+    // Should have 1 from gainers and 1 from losers
+    expect(movers).toHaveLength(2);
+    const symbols = movers.map(m => m.symbol);
+    expect(symbols).toContain('AAPL');
+    expect(symbols).toContain('TSLA');
     expect(movers[0].source).toBe('polygon');
   });
 });

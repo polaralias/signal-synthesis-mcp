@@ -168,27 +168,42 @@ export class PolygonProvider implements MarketDataProvider {
     // Or "Gainers/Losers" API which is effectively movers.
     // https://polygon.io/docs/stocks/get_v2_snapshot_locale_us_markets_stocks_direction
 
-    // Direction: gainers or losers. We probably want both or top active.
-    // Let's implement "gainers" for discovery for now.
+    // We fetch gainers and losers. "Active" isn't a direct endpoint, but gainers/losers usually cover high volatility.
+    // We will fetch both and merge them.
 
     try {
-        const url = `https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/gainers?${this.authParam}`;
-        const res = await fetch(url);
-        const data = await res.json();
+        const fetchDirection = async (direction: 'gainers' | 'losers') => {
+            const url = `https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/${direction}?${this.authParam}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            if (data.status === 'OK' && data.tickers) {
+                 return (data.tickers as PolygonSnapshot[]);
+            }
+            return [];
+        };
 
-        if (data.status === 'OK' && data.tickers) {
-            const snapshots = (data.tickers as PolygonSnapshot[])
-                .slice(0, limit)
-                .map(t => ({
-                    symbol: t.ticker,
-                    price: t.day.c,
-                    changePercent: t.todaysChangePerc,
-                    volume: t.day.v,
-                    description: undefined,
-                    source: 'polygon'
-                }));
-            return snapshots;
-        }
+        const [gainers, losers] = await Promise.all([
+            fetchDirection('gainers'),
+            fetchDirection('losers')
+        ]);
+
+        // Combine and limit
+        // We take top N/2 from each to ensure variety
+        const topGainers = gainers.slice(0, Math.ceil(limit / 2));
+        const topLosers = losers.slice(0, Math.ceil(limit / 2));
+
+        const combined = [...topGainers, ...topLosers];
+
+        // Map to MarketSnapshot
+        return combined.map(t => ({
+            symbol: t.ticker,
+            price: t.day.c,
+            changePercent: t.todaysChangePerc,
+            volume: t.day.v,
+            description: undefined,
+            source: 'polygon'
+        }));
+
     } catch (e) {
         console.error('Error fetching Polygon movers:', e);
     }
