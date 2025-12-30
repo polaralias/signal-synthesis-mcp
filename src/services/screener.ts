@@ -25,38 +25,46 @@ export class SmartScreener {
     // Fetch a larger set to allow for filtering
     const candidates = await this.marketProvider.getMovers(100);
 
-    const filtered = [];
+    // Basic Price/Volume filters first
+    const basicFiltered = candidates.filter(candidate => {
+        if (criteria.minPrice && candidate.price < criteria.minPrice) return false;
+        if (criteria.maxPrice && candidate.price > criteria.maxPrice) return false;
+        if (criteria.minVolume && candidate.volume < criteria.minVolume) return false;
+        return true;
+    });
 
-    for (const candidate of candidates) {
-        // Basic Price/Volume filters
-        if (criteria.minPrice && candidate.price < criteria.minPrice) continue;
-        if (criteria.maxPrice && candidate.price > criteria.maxPrice) continue;
-        if (criteria.minVolume && candidate.volume < criteria.minVolume) continue;
+    if (!criteria.sector && !criteria.minMarketCap) {
+        return basicFiltered;
+    }
 
-        // Context filters (Sector, Market Cap) - requires extra fetch
-        if (criteria.sector || criteria.minMarketCap) {
-             try {
-                // TODO: Batch this if possible, or cache heavily
-                const profile = await this.contextProvider.getCompanyProfile(candidate.symbol);
+    const filtered: MarketSnapshot[] = [];
 
-                if (criteria.sector && profile.sector !== criteria.sector) continue;
-                // Note: Market cap is not strictly in CompanyProfile in this codebase yet?
-                // Let's check models/data.ts. Assuming it is or we get it from elsewhere.
-                // Actually FinancialMetrics usually has marketCap.
+    // Process in batches to avoid overwhelming the provider
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < basicFiltered.length; i += BATCH_SIZE) {
+        const batch = basicFiltered.slice(i, i + BATCH_SIZE);
 
-                if (criteria.minMarketCap) {
-                    const metrics = await this.contextProvider.getFinancialMetrics(candidate.symbol);
-                    if (metrics.marketCap && metrics.marketCap < criteria.minMarketCap) continue;
+        await Promise.all(batch.map(async (candidate) => {
+            try {
+                let keep = true;
+
+                if (criteria.sector) {
+                    const profile = await this.contextProvider.getCompanyProfile(candidate.symbol);
+                    if (profile.sector !== criteria.sector) keep = false;
                 }
-             } catch (e) {
-                 // If we can't verify context, we might skip or include depending on strategy.
-                 // For safety, we skip.
-                 console.warn(`Could not verify context for ${candidate.symbol}`, e);
-                 continue;
-             }
-        }
 
-        filtered.push(candidate);
+                if (keep && criteria.minMarketCap) {
+                    const metrics = await this.contextProvider.getFinancialMetrics(candidate.symbol);
+                    if (metrics.marketCap && metrics.marketCap < criteria.minMarketCap) keep = false;
+                }
+
+                if (keep) {
+                    filtered.push(candidate);
+                }
+            } catch (e) {
+                console.warn(`Could not verify context for ${candidate.symbol}`, e);
+            }
+        }));
     }
 
     return filtered;
