@@ -1,5 +1,5 @@
 import { MarketDataProvider, ContextDataProvider } from '../interfaces/index';
-import { Bar, Quote, MarketSnapshot, CompanyProfile, NewsItem } from '../models/data';
+import { Bar, Quote, MarketSnapshot, CompanyProfile, NewsItem, SentimentData } from '../models/data';
 
 export class MockProvider implements MarketDataProvider, ContextDataProvider {
   async getQuotes(symbols: string[]): Promise<Quote[]> {
@@ -116,5 +116,15 @@ export class MockProvider implements MarketDataProvider, ContextDataProvider {
       ];
     }
     return result;
+  }
+
+  async getSentiment(symbol: string): Promise<SentimentData> {
+      return {
+          symbol,
+          score: 0.5,
+          label: 'Bullish',
+          source: 'mock',
+          confidence: 0.9
+      };
   }
 }

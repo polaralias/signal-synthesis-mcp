@@ -1,5 +1,5 @@
 import { ContextDataProvider } from '../interfaces/context-data';
-import { CompanyProfile, NewsItem } from '../models/data';
+import { CompanyProfile, NewsItem, SentimentData } from '../models/data';
 
 interface FMPProfile {
   symbol: string;
@@ -166,5 +166,11 @@ export class FMPProvider implements ContextDataProvider {
         console.error('Error fetching FMP news:', error);
     }
     return result;
+  }
+
+  async getSentiment(symbol: string): Promise<SentimentData> {
+      // FMP has a Social Sentiment endpoint but it requires premium usually.
+      // We can implement a basic fallback or throw to let the Fallback provider try next (e.g. Finnhub).
+      throw new Error('FMP Sentiment not implemented');
   }
 }

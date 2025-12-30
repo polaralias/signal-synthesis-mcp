@@ -1,5 +1,5 @@
 import { ContextDataProvider } from '../interfaces/context-data';
-import { CompanyProfile, FinancialMetrics, NewsItem } from '../models/data';
+import { CompanyProfile, FinancialMetrics, NewsItem, SentimentData } from '../models/data';
 
 export class FinnhubProvider implements ContextDataProvider {
   private apiKey: string;
@@ -112,5 +112,88 @@ export class FinnhubProvider implements ContextDataProvider {
           console.error('Error fetching earnings calendar:', e);
           return [];
       }
+  }
+
+  async getSentiment(symbol: string): Promise<SentimentData> {
+      // Try to use News Sentiment endpoint first
+      if (!this.apiKey) return this.getDefaultSentiment(symbol);
+
+      const url = `${this.baseUrl}/news-sentiment?symbol=${symbol}&token=${this.apiKey}`;
+
+      try {
+          const response = await fetch(url);
+          if (response.ok) {
+             const data = await response.json();
+             // Finnhub sentiment object: { buzz: {}, companyNewsScore: 0.5, sectorAverageBullishPercent: 0.6, sentiment: { bearishPercent: 0.1, bullishPercent: 0.7 } }
+             if (data && data.sentiment) {
+                 const bullish = data.sentiment.bullishPercent;
+                 const bearish = data.sentiment.bearishPercent;
+                 const score = bullish - bearish; // Rough score -1 to 1
+
+                 let label: SentimentData['label'] = 'Neutral';
+                 if (score > 0.5) label = 'Bullish';
+                 else if (score > 0.1) label = 'Somewhat Bullish';
+                 else if (score < -0.5) label = 'Bearish';
+                 else if (score < -0.1) label = 'Somewhat Bearish';
+
+                 return {
+                     symbol,
+                     score,
+                     label,
+                     source: 'Finnhub News Sentiment',
+                     confidence: data.sectorAverageBullishPercent // Use sector average as a proxy for confidence/relevance? Or just undefined.
+                 };
+             }
+          }
+      } catch (e) {
+         console.warn(`Error fetching Finnhub sentiment for ${symbol}, falling back to headline analysis`, e);
+      }
+
+      // Fallback: Analyze recent news headlines
+      const news = await this.getNews([symbol], 10);
+      const items = news[symbol] || [];
+      if (items.length === 0) return this.getDefaultSentiment(symbol);
+
+      let score = 0;
+      const positiveWords = ['beat', 'rise', 'up', 'growth', 'profit', 'gain', 'buy', 'bull', 'upgrade'];
+      const negativeWords = ['miss', 'fall', 'down', 'loss', 'drop', 'sell', 'bear', 'downgrade', 'weak'];
+
+      items.forEach(item => {
+          const text = (item.headline + ' ' + (item.summary || '')).toLowerCase();
+          positiveWords.forEach(w => {
+              const regex = new RegExp(`\\b${w}\\b`, 'i');
+              if (regex.test(text)) score += 0.1;
+          });
+          negativeWords.forEach(w => {
+              const regex = new RegExp(`\\b${w}\\b`, 'i');
+              if (regex.test(text)) score -= 0.1;
+          });
+      });
+
+      // Clamp score -1 to 1
+      score = Math.max(-1, Math.min(1, score));
+
+      let label: SentimentData['label'] = 'Neutral';
+      if (score > 0.3) label = 'Bullish';
+      else if (score > 0.05) label = 'Somewhat Bullish';
+      else if (score < -0.3) label = 'Bearish';
+      else if (score < -0.05) label = 'Somewhat Bearish';
+
+      return {
+          symbol,
+          score,
+          label,
+          source: 'Headline Analysis',
+          confidence: 0.5 // Low confidence for basic keyword matching
+      };
+  }
+
+  private getDefaultSentiment(symbol: string): SentimentData {
+      return {
+          symbol,
+          score: 0,
+          label: 'Neutral',
+          source: 'Default'
+      };
   }
 }

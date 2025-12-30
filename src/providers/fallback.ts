@@ -1,5 +1,5 @@
 import { MarketDataProvider, ContextDataProvider } from '../interfaces/index';
-import { Quote, Bar, MarketSnapshot, CompanyProfile, NewsItem } from '../models/data';
+import { Quote, Bar, MarketSnapshot, CompanyProfile, NewsItem, SentimentData } from '../models/data';
 
 export class FallbackMarketDataProvider implements MarketDataProvider {
   constructor(private providers: MarketDataProvider[]) {}
@@ -61,5 +61,9 @@ export class FallbackContextDataProvider implements ContextDataProvider {
 
   async getNews(symbols: string[], limit?: number): Promise<Record<string, NewsItem[]>> {
     return this.execute(p => p.getNews(symbols, limit));
+  }
+
+  async getSentiment(symbol: string): Promise<SentimentData> {
+    return this.execute(p => p.getSentiment(symbol));
   }
 }

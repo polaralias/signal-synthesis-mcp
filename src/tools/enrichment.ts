@@ -1,5 +1,5 @@
 import { Router } from '../routing/index';
-import { Bar, CompanyProfile, FinancialMetrics } from '../models/data';
+import { Bar, CompanyProfile, FinancialMetrics, SentimentData } from '../models/data';
 
 export interface IntradayStats {
   vwap: number;
@@ -22,6 +22,7 @@ export interface ContextData {
   profile: CompanyProfile;
   metrics: Record<string, any>;
   earnings?: Record<string, any>;
+  sentiment?: SentimentData;
 }
 
 export interface EodStats {
@@ -206,9 +207,13 @@ export async function enrichContext(
     // Parallel fetch for each symbol
     await Promise.all(symbols.map(async (symbol) => {
         try {
-            const [profile, metrics] = await Promise.all([
+            const [profile, metrics, sentiment] = await Promise.all([
                 contextProvider.getCompanyProfile(symbol),
-                contextProvider.getFinancialMetrics(symbol)
+                contextProvider.getFinancialMetrics(symbol),
+                contextProvider.getSentiment(symbol).catch(e => {
+                  console.warn(`Failed to fetch sentiment for ${symbol}`, e);
+                  return undefined;
+                })
             ]);
 
             // Optional: Check earnings
@@ -217,7 +222,8 @@ export async function enrichContext(
 
             result[symbol] = {
                 profile,
-                metrics
+                metrics,
+                sentiment
             };
         } catch (e) {
             console.error(`Error enriching context for ${symbol}:`, e);

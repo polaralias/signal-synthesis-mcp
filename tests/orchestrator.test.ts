@@ -27,6 +27,12 @@ jest.mock('../src/routing/index.js', () => {
         getContextProvider: jest.fn().mockReturnValue({
           getCompanyProfile: jest.fn().mockResolvedValue({ sector: 'Technology', description: 'Tech Company' }),
           getFinancialMetrics: jest.fn().mockResolvedValue({ marketCap: 2000000000 }),
+          getSentiment: jest.fn().mockResolvedValue({
+            symbol: 'TEST',
+            score: 0.5,
+            label: 'Bullish',
+            source: 'Mock',
+          }),
         }),
       };
     }),

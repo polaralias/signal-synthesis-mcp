@@ -1,11 +1,11 @@
 import { planAndRun } from '../src/tools/orchestrator';
 import { Router } from '../src/routing';
 import { MarketDataProvider } from '../src/interfaces/market-data';
-import { ContextProvider } from '../src/interfaces/context-data';
-import { MarketSnapshot, Bar, CompanyProfile, FinancialMetrics } from '../src/models/data';
+import { ContextDataProvider } from '../src/interfaces/context-data';
+import { MarketSnapshot, Bar, CompanyProfile, FinancialMetrics, SentimentData } from '../src/models/data';
 
 // Mock Provider Implementation
-class MockTestProvider implements MarketDataProvider, ContextProvider {
+class MockTestProvider implements MarketDataProvider, ContextDataProvider {
   // Market Data
   async getQuotes(symbols: string[]) {
     return symbols.map(s => ({
@@ -73,6 +73,20 @@ class MockTestProvider implements MarketDataProvider, ContextProvider {
 
   async getInsiderSentiments(symbol: string) { return null; }
   async getEarningsSurprises(symbol: string) { return []; }
+
+  async getEarningsCalendar(startDate: Date, endDate: Date) { return []; }
+
+  async getNews(symbols: string[]) { return {}; }
+
+  async getSentiment(symbol: string): Promise<SentimentData> {
+      return {
+          symbol,
+          score: 0.5,
+          label: 'Bullish',
+          source: 'Mock',
+          confidence: 1.0
+      };
+  }
 }
 
 describe('E2E Pipeline', () => {
