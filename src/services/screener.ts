@@ -1,11 +1,11 @@
 import { MarketDataProvider, ScreeningCriteria } from '../interfaces/market-data';
-import { ContextProvider } from '../interfaces/context-data';
+import { ContextDataProvider } from '../interfaces/context-data';
 import { MarketSnapshot } from '../models/data';
 
 export class SmartScreener {
   constructor(
     private marketProvider: MarketDataProvider,
-    private contextProvider: ContextProvider
+    private contextProvider: ContextDataProvider
   ) {}
 
   async screen(criteria: ScreeningCriteria): Promise<MarketSnapshot[]> {
