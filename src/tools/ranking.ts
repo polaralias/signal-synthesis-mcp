@@ -76,7 +76,25 @@ export function rankSetups(
         }
     }
 
-    // 5. EOD / Long Term Checks
+    // 5. Bollinger Bands (Mean Reversion / Squeeze)
+    if (stats.bollinger) {
+        const { upper, lower, middle } = stats.bollinger;
+        // Price touching lower band - potential bounce
+        if (currentPrice <= lower * 1.01) {
+             score += 1;
+             reasoning.push('Price at Bollinger Lower Band (Oversold)');
+        }
+        // Price touching upper band - potential pullback (or breakout)
+        else if (currentPrice >= upper * 0.99) {
+             // Context dependent, but generally overextended
+             score -= 0.5;
+             reasoning.push('Price at Bollinger Upper Band (Overbought)');
+        }
+
+        // Squeeze detection (Bandwidth narrowing) - Advanced, maybe later
+    }
+
+    // 6. EOD / Long Term Checks
     if (eod) {
         // Price vs SMA50 (Bullish trend)
         if (eod.sma50 > 0 && currentPrice > eod.sma50) {
