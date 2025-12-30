@@ -100,6 +100,11 @@ export class FinancialServer {
                 type: 'number',
                 description: 'Max number of candidates',
               },
+              minPrice: { type: 'number', description: 'Minimum price' },
+              maxPrice: { type: 'number', description: 'Maximum price' },
+              minVolume: { type: 'number', description: 'Minimum volume' },
+              sector: { type: 'string', description: 'Filter by sector' },
+              minMarketCap: { type: 'number', description: 'Minimum market cap' },
             },
           },
         },
@@ -221,9 +226,15 @@ export class FinancialServer {
         const schema = z.object({
           intent: z.enum(['day_trade', 'swing', 'long_term']).optional(),
           limit: z.number().optional(),
+          minPrice: z.number().optional(),
+          maxPrice: z.number().optional(),
+          minVolume: z.number().optional(),
+          sector: z.string().optional(),
+          minMarketCap: z.number().optional(),
         });
-        const { intent, limit } = schema.parse(args);
-        const results = await discoverCandidates(router, intent, limit);
+        const { intent, limit, minPrice, maxPrice, minVolume, sector, minMarketCap } = schema.parse(args);
+        const criteria = { minPrice, maxPrice, minVolume, sector, minMarketCap };
+        const results = await discoverCandidates(router, intent, limit, criteria);
         return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
       }
 

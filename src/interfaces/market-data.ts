@@ -1,5 +1,13 @@
 import { Bar, Quote, MarketSnapshot } from '../models/data';
 
+export interface ScreeningCriteria {
+  minPrice?: number;
+  maxPrice?: number;
+  minVolume?: number;
+  sector?: string;
+  minMarketCap?: number;
+}
+
 export interface MarketDataProvider {
   getQuotes(symbols: string[]): Promise<Quote[]>;
   /**
@@ -23,5 +31,11 @@ export interface MarketDataProvider {
   /**
    * Get top gainers/losers/active symbols.
    * Used for discovery.
+   */
+
+  screen?(criteria: ScreeningCriteria): Promise<MarketSnapshot[]>;
+  /**
+   * Filter the market for candidates matching the criteria.
+   * If a provider doesn't support screening, it can return undefined or implement a fallback.
    */
 }

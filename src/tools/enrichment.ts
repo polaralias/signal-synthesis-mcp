@@ -4,6 +4,12 @@ import { Bar, CompanyProfile, FinancialMetrics } from '../models/data';
 export interface IntradayStats {
   vwap: number;
   atr?: number;
+  rsi?: number;
+  macd?: {
+    macd: number;
+    signal: number;
+    histogram: number;
+  };
   bars: Bar[];
 }
 
@@ -64,14 +70,99 @@ export async function enrichIntraday(
         atr = sumTR / 14;
     }
 
+    // Calculate RSI (14-period)
+    const rsi = calculateRSI(bars, 14);
+
+    // Calculate MACD (12, 26, 9)
+    const macd = calculateMACD(bars, 12, 26, 9);
+
     result[symbol] = {
         vwap,
         atr,
+        rsi,
+        macd,
         bars
     };
   }
 
   return result;
+}
+
+function calculateRSI(bars: Bar[], period: number = 14): number | undefined {
+  if (bars.length <= period) return undefined;
+
+  let gains = 0;
+  let losses = 0;
+
+  // Initial average gain/loss
+  for (let i = 1; i <= period; i++) {
+    const change = bars[i].close - bars[i - 1].close;
+    if (change > 0) gains += change;
+    else losses -= change;
+  }
+
+  let avgGain = gains / period;
+  let avgLoss = losses / period;
+
+  // Smoothed averages
+  for (let i = period + 1; i < bars.length; i++) {
+    const change = bars[i].close - bars[i - 1].close;
+    if (change > 0) {
+      avgGain = (avgGain * (period - 1) + change) / period;
+      avgLoss = (avgLoss * (period - 1)) / period;
+    } else {
+      avgGain = (avgGain * (period - 1)) / period;
+      avgLoss = (avgLoss * (period - 1) - change) / period;
+    }
+  }
+
+  if (avgLoss === 0) return 100;
+
+  const rs = avgGain / avgLoss;
+  return 100 - (100 / (1 + rs));
+}
+
+function calculateMACD(
+  bars: Bar[],
+  shortPeriod: number = 12,
+  longPeriod: number = 26,
+  signalPeriod: number = 9
+): { macd: number; signal: number; histogram: number } | undefined {
+  if (bars.length <= longPeriod + signalPeriod) return undefined;
+
+  const closes = bars.map(b => b.close);
+
+  const ema = (data: number[], period: number): number[] => {
+    const k = 2 / (period + 1);
+    const result = [data[0]];
+    for (let i = 1; i < data.length; i++) {
+      result.push(data[i] * k + result[i - 1] * (1 - k));
+    }
+    return result;
+  };
+
+  const shortEMA = ema(closes, shortPeriod);
+  const longEMA = ema(closes, longPeriod);
+
+  const macdLine: number[] = [];
+  for (let i = 0; i < closes.length; i++) {
+      macdLine.push(shortEMA[i] - longEMA[i]);
+  }
+
+  // Signal line is EMA of MACD line
+  // We need to start calculating signal line after we have enough MACD data points
+  // Actually standard EMA function assumes starting from index 0.
+  // The MACD line values at the beginning are not accurate because of EMA ramp-up,
+  // but for simplicity we calculate EMA on the whole MACD series.
+  const signalLine = ema(macdLine, signalPeriod);
+
+  const lastIndex = closes.length - 1;
+
+  return {
+      macd: macdLine[lastIndex],
+      signal: signalLine[lastIndex],
+      histogram: macdLine[lastIndex] - signalLine[lastIndex]
+  };
 }
 
 export async function enrichContext(
