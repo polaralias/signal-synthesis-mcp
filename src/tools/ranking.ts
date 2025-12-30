@@ -53,7 +53,30 @@ export function rankSetups(
         }
     }
 
-    // 4. EOD / Long Term Checks
+    // 4. Momentum Indicators (RSI & MACD)
+    if (stats.rsi) {
+        if (stats.rsi < 30) {
+            score += 1;
+            reasoning.push(`RSI Oversold (${stats.rsi.toFixed(1)})`);
+        } else if (stats.rsi > 70) {
+            // Depending on strategy, this could be good (momentum) or bad (reversal)
+            // For trend following, we might penalize slightly or just note it
+            score -= 0.5;
+            reasoning.push(`RSI Overbought (${stats.rsi.toFixed(1)})`);
+        }
+    }
+
+    if (stats.macd) {
+        if (stats.macd.histogram > 0 && stats.macd.macd > stats.macd.signal) {
+            score += 0.5;
+            reasoning.push('MACD Bullish');
+        } else if (stats.macd.histogram < 0 && stats.macd.macd < stats.macd.signal) {
+            score -= 0.5;
+            reasoning.push('MACD Bearish');
+        }
+    }
+
+    // 5. EOD / Long Term Checks
     if (eod) {
         // Price vs SMA50 (Bullish trend)
         if (eod.sma50 > 0 && currentPrice > eod.sma50) {
@@ -76,8 +99,10 @@ export function rankSetups(
     // Simple Bullish Trend: Price > VWAP and Price > Open
     if (stats.vwap && currentPrice > stats.vwap && currentPrice > lastBar.open) {
         setupType = 'Bullish Trend';
+        if (stats.rsi && stats.rsi < 30) setupType = 'Oversold Bounce';
     } else if (stats.vwap && currentPrice < stats.vwap && currentPrice < lastBar.open) {
         setupType = 'Bearish Trend';
+        if (stats.rsi && stats.rsi > 70) setupType = 'Overbought Pullback';
     } else {
         setupType = 'Consolidation';
     }
