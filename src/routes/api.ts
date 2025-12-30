@@ -167,4 +167,38 @@ router.post('/token', async (req, res) => {
   }
 });
 
+// --- Trade Setups ---
+
+// Get trade setups history
+router.get('/setups', async (req, res) => {
+  const schema = z.object({
+    limit: z.coerce.number().min(1).max(100).default(50),
+    intent: z.enum(['day_trade', 'swing', 'long_term']).optional(),
+    symbol: z.string().optional()
+  });
+
+  try {
+    const { limit, intent, symbol } = schema.parse(req.query);
+
+    const where: any = {};
+    if (intent) where.intent = intent;
+    if (symbol) where.symbol = symbol;
+
+    const setups = await prisma.tradeSetup.findMany({
+      where,
+      take: limit,
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(setups);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: error.errors });
+    } else {
+      console.error(error);
+      res.status(500).json({ error: 'Failed to fetch trade setups' });
+    }
+  }
+});
+
 export default router;

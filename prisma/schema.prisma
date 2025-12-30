@@ -68,3 +68,22 @@ model AuditLog {
 
   @@map("audit_logs")
 }
+
+model TradeSetup {
+  id              String   @id @default(uuid())
+  symbol          String
+  setupType       String   @map("setup_type")
+  triggerPrice    Float    @map("trigger_price")
+  stopLoss        Float    @map("stop_loss")
+  targetPrice     Float?   @map("target_price")
+  confidence      Float
+  reasoning       Json
+  validUntil      DateTime? @map("valid_until")
+  intent          String   // 'day_trade', 'swing', 'long_term'
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([symbol])
+  @@index([intent])
+  @@index([createdAt])
+  @@map("trade_setups")
+}
