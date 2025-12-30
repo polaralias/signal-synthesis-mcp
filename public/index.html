@@ -4,59 +4,107 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Financial MCP - Connection Manager</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f4f4f9; }
-        h1, h2 { color: #333; }
-        .card { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input[type="text"], input[type="password"] { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        button { background: #0066cc; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #0055aa; }
-        .connection-item { border-bottom: 1px solid #eee; padding: 10px 0; display: flex; justify-content: space-between; align-items: center; }
-        .connection-item:last-child { border-bottom: none; }
-        code { background: #eee; padding: 2px 5px; border-radius: 3px; }
-        .token-display { word-break: break-all; background: #e8f0fe; color: #1a73e8; padding: 10px; border-radius: 4px; margin-top: 10px; display: none; }
-    </style>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#0066cc',
+                        secondary: '#0055aa',
+                        background: '#f4f4f9',
+                    }
+                }
+            }
+        }
+    </script>
 </head>
-<body>
-    <h1>Financial MCP Manager</h1>
+<body class="bg-gray-50 min-h-screen text-gray-800 font-sans">
+    <div class="max-w-4xl mx-auto p-6">
+        <header class="mb-10 text-center">
+            <h1 class="text-4xl font-extrabold text-gray-900 tracking-tight">Financial MCP</h1>
+            <p class="mt-2 text-lg text-gray-600">Secure Connection Manager</p>
+        </header>
 
-    <div class="card">
-        <h2>Create Connection</h2>
-        <form id="createForm">
-            <div class="form-group">
-                <label for="name">Connection Name</label>
-                <input type="text" id="name" required placeholder="e.g. My Alpaca Connection">
+        <!-- Authorization Mode Alert -->
+        <div id="authModeAlert" class="hidden mb-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r shadow-sm">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm text-blue-700">
+                        Select or create a connection to authorize access for the requesting application.
+                    </p>
+                </div>
             </div>
-            <div class="form-group">
-                <label for="alpacaKey">Alpaca API Key</label>
-                <input type="text" id="alpacaKey">
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Create Connection Card -->
+            <div class="bg-white p-8 rounded-xl shadow-lg border border-gray-100">
+                <h2 class="text-2xl font-bold mb-6 text-gray-800 border-b pb-2">Create Connection</h2>
+                <form id="createForm" class="space-y-5">
+                    <div>
+                        <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Connection Name</label>
+                        <input type="text" id="name" required placeholder="e.g. My Alpaca Connection" 
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-colors outline-none">
+                    </div>
+                    <div>
+                        <label for="alpacaKey" class="block text-sm font-medium text-gray-700 mb-1">Alpaca API Key</label>
+                        <input type="text" id="alpacaKey" 
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-colors outline-none font-mono text-sm">
+                    </div>
+                    <div>
+                        <label for="alpacaSecret" class="block text-sm font-medium text-gray-700 mb-1">Alpaca Secret Key</label>
+                        <input type="password" id="alpacaSecret" 
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-colors outline-none font-mono text-sm">
+                    </div>
+                    <div>
+                        <label for="polygonKey" class="block text-sm font-medium text-gray-700 mb-1">Polygon API Key</label>
+                        <input type="text" id="polygonKey" 
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-colors outline-none font-mono text-sm">
+                    </div>
+                    <button type="submit" 
+                        class="w-full bg-primary hover:bg-secondary text-white font-semibold py-2 px-4 rounded-lg shadow transition-colors duration-200">
+                        Create Connection
+                    </button>
+                </form>
             </div>
-            <div class="form-group">
-                <label for="alpacaSecret">Alpaca Secret Key</label>
-                <input type="password" id="alpacaSecret">
+
+            <!-- Existing Connections Card -->
+            <div class="bg-white p-8 rounded-xl shadow-lg border border-gray-100 flex flex-col">
+                <h2 class="text-2xl font-bold mb-6 text-gray-800 border-b pb-2">Existing Connections</h2>
+                <div id="connectionList" class="flex-grow space-y-4 overflow-y-auto max-h-[500px]">
+                    <div class="flex justify-center items-center h-full text-gray-400">Loading...</div>
+                </div>
             </div>
-            <div class="form-group">
-                <label for="polygonKey">Polygon API Key</label>
-                <input type="text" id="polygonKey">
-            </div>
-            <button type="submit">Create Connection</button>
-        </form>
+        </div>
     </div>
 
-    <div class="card">
-        <h2>Existing Connections</h2>
-        <div id="connectionList">Loading...</div>
-    </div>
+    <!-- Session Modal -->
+    <div id="sessionModal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-8 max-w-lg w-full mx-4 relative">
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Session Created</h2>
+            <p class="text-gray-600 mb-6">Use the following details to connect your MCP client:</p>
+            
+            <div class="mb-4">
+                <p class="text-sm font-bold text-gray-700 mb-1">MCP Endpoint:</p>
+                <div class="bg-gray-100 p-3 rounded border border-gray-200 font-mono text-sm break-all" id="mcpEndpoint"></div>
+            </div>
 
-    <div id="sessionModal" class="card" style="display:none; border: 2px solid #0066cc;">
-        <h2>Session Created</h2>
-        <p>Use the following details to connect your MCP client:</p>
-        <p><strong>MCP Endpoint:</strong> <code id="mcpEndpoint"></code></p>
-        <p><strong>Authorization Header:</strong></p>
-        <div class="token-display" id="tokenDisplay" style="display:block;"></div>
-        <button onclick="document.getElementById('sessionModal').style.display='none'">Close</button>
+            <div class="mb-6">
+                <p class="text-sm font-bold text-gray-700 mb-1">Authorization Header:</p>
+                <div class="bg-blue-50 text-blue-800 p-4 rounded border border-blue-200 font-mono text-sm break-all" id="tokenDisplay"></div>
+            </div>
+
+            <button onclick="document.getElementById('sessionModal').classList.add('hidden')" 
+                class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg transition-colors">
+                Close
+            </button>
+        </div>
     </div>
 
     <script src="app.js"></script>
