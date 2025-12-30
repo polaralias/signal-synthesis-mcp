@@ -1,6 +1,23 @@
 import { TradeSetup } from '../models/data';
 import { IntradayStats, ContextData, EodStats } from './enrichment';
 
+export const ScoringWeights = {
+    priceAboveVwap: 1.0,
+    volumeSpike: 1.0,
+    sectorBonus: 0.5,
+    preferredSector: 'Technology',
+    sentimentMultiplier: 1.5,
+    rsiOversold: 1.0,
+    rsiOverboughtPenalty: -0.5,
+    macdBullish: 0.5,
+    macdBearishPenalty: -0.5,
+    bollingerLower: 1.0,
+    bollingerUpperPenalty: -0.5,
+    sma50Trend: 1.0,
+    sma200Trend: 1.0,
+    goldenCross: 0.5
+};
+
 export function rankSetups(
   intradayData: Record<string, IntradayStats>,
   contextData: Record<string, ContextData>,
@@ -31,7 +48,7 @@ export function rankSetups(
 
     // 1. Price vs VWAP
     if (stats.vwap && currentPrice > stats.vwap) {
-        score += 1;
+        score += ScoringWeights.priceAboveVwap;
         reasoning.push('Price above VWAP');
     }
 
@@ -39,7 +56,7 @@ export function rankSetups(
     if (bars.length >= 10) {
         const last10Vol = bars.slice(-10).reduce((acc, b) => acc + b.volume, 0) / 10;
         if (lastBar.volume > last10Vol) {
-            score += 1;
+            score += ScoringWeights.volumeSpike;
             reasoning.push('Volume spiking above recent average');
         }
     }
@@ -47,9 +64,9 @@ export function rankSetups(
     // 3. Sector/Context (Bonus)
     if (context && context.profile) {
         // Placeholder for sector logic, e.g. "Technology" is hot
-        if (context.profile.sector === 'Technology') {
-            score += 0.5; // Small bonus
-            reasoning.push('Technology sector');
+        if (context.profile.sector === ScoringWeights.preferredSector) {
+            score += ScoringWeights.sectorBonus;
+            reasoning.push(`${ScoringWeights.preferredSector} sector`);
         }
     }
 
@@ -57,10 +74,10 @@ export function rankSetups(
     if (context && context.sentiment) {
         const sentimentScore = context.sentiment.score; // -1 to 1
         if (sentimentScore > 0.2) {
-            score += sentimentScore * 1.5; // Max 1.5 bonus
+            score += sentimentScore * ScoringWeights.sentimentMultiplier;
             reasoning.push(`Positive Sentiment (${context.sentiment.label})`);
         } else if (sentimentScore < -0.2) {
-            score += sentimentScore * 1.5; // Max 1.5 penalty
+            score += sentimentScore * ScoringWeights.sentimentMultiplier;
             reasoning.push(`Negative Sentiment (${context.sentiment.label})`);
         }
     }
@@ -68,22 +85,22 @@ export function rankSetups(
     // 4. Momentum Indicators (RSI & MACD)
     if (stats.rsi) {
         if (stats.rsi < 30) {
-            score += 1;
+            score += ScoringWeights.rsiOversold;
             reasoning.push(`RSI Oversold (${stats.rsi.toFixed(1)})`);
         } else if (stats.rsi > 70) {
             // Depending on strategy, this could be good (momentum) or bad (reversal)
             // For trend following, we might penalize slightly or just note it
-            score -= 0.5;
+            score += ScoringWeights.rsiOverboughtPenalty;
             reasoning.push(`RSI Overbought (${stats.rsi.toFixed(1)})`);
         }
     }
 
     if (stats.macd) {
         if (stats.macd.histogram > 0 && stats.macd.macd > stats.macd.signal) {
-            score += 0.5;
+            score += ScoringWeights.macdBullish;
             reasoning.push('MACD Bullish');
         } else if (stats.macd.histogram < 0 && stats.macd.macd < stats.macd.signal) {
-            score -= 0.5;
+            score += ScoringWeights.macdBearishPenalty;
             reasoning.push('MACD Bearish');
         }
     }
@@ -93,13 +110,13 @@ export function rankSetups(
         const { upper, lower, middle } = stats.bollinger;
         // Price touching lower band - potential bounce
         if (currentPrice <= lower * 1.01) {
-             score += 1;
+             score += ScoringWeights.bollingerLower;
              reasoning.push('Price at Bollinger Lower Band (Oversold)');
         }
         // Price touching upper band - potential pullback (or breakout)
         else if (currentPrice >= upper * 0.99) {
              // Context dependent, but generally overextended
-             score -= 0.5;
+             score += ScoringWeights.bollingerUpperPenalty;
              reasoning.push('Price at Bollinger Upper Band (Overbought)');
         }
 
@@ -110,17 +127,17 @@ export function rankSetups(
     if (eod) {
         // Price vs SMA50 (Bullish trend)
         if (eod.sma50 > 0 && currentPrice > eod.sma50) {
-            score += 1;
+            score += ScoringWeights.sma50Trend;
             reasoning.push('Price above 50-day SMA');
         }
         // Price vs SMA200 (Long term trend)
         if (eod.sma200 > 0 && currentPrice > eod.sma200) {
-            score += 1;
+            score += ScoringWeights.sma200Trend;
             reasoning.push('Price above 200-day SMA');
         }
         // Golden Cross Check (SMA50 > SMA200) - Basic check
         if (eod.sma50 > 0 && eod.sma200 > 0 && eod.sma50 > eod.sma200) {
-            score += 0.5;
+            score += ScoringWeights.goldenCross;
             reasoning.push('SMA50 above SMA200 (Golden Cross setup)');
         }
     }
