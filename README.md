@@ -1,1 +1,1 @@
-# signal-synthesis-mcp
+# signalsynthesis-mcp

@@ -1,0 +1,28 @@
+runtime: "container"
+startCommand:
+  type: "http"
+  configSchema:
+    type: "object"
+    properties:
+      ALPACA_API_KEY:
+        type: "string"
+        description: "Alpaca API Key for market data"
+      ALPACA_SECRET_KEY:
+        type: "string"
+        description: "Alpaca Secret Key"
+      POLYGON_API_KEY:
+        type: "string"
+        description: "Polygon.io API Key"
+      FMP_API_KEY:
+        type: "string"
+        description: "Financial Modeling Prep API Key"
+      FINNHUB_API_KEY:
+        type: "string"
+        description: "Finnhub API Key"
+      ENABLE_CACHING:
+        type: "boolean"
+        description: "Enable data caching"
+        default: true
+build:
+  dockerfile: "Dockerfile"
+  dockerBuildPath: "."

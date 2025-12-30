@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financial MCP - Connection Manager</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f4f4f9; }
+        h1, h2 { color: #333; }
+        .card { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"], input[type="password"] { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { background: #0066cc; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0055aa; }
+        .connection-item { border-bottom: 1px solid #eee; padding: 10px 0; display: flex; justify-content: space-between; align-items: center; }
+        .connection-item:last-child { border-bottom: none; }
+        code { background: #eee; padding: 2px 5px; border-radius: 3px; }
+        .token-display { word-break: break-all; background: #e8f0fe; color: #1a73e8; padding: 10px; border-radius: 4px; margin-top: 10px; display: none; }
+    </style>
+</head>
+<body>
+    <h1>Financial MCP Manager</h1>
+
+    <div class="card">
+        <h2>Create Connection</h2>
+        <form id="createForm">
+            <div class="form-group">
+                <label for="name">Connection Name</label>
+                <input type="text" id="name" required placeholder="e.g. My Alpaca Connection">
+            </div>
+            <div class="form-group">
+                <label for="alpacaKey">Alpaca API Key</label>
+                <input type="text" id="alpacaKey">
+            </div>
+            <div class="form-group">
+                <label for="alpacaSecret">Alpaca Secret Key</label>
+                <input type="password" id="alpacaSecret">
+            </div>
+            <div class="form-group">
+                <label for="polygonKey">Polygon API Key</label>
+                <input type="text" id="polygonKey">
+            </div>
+            <button type="submit">Create Connection</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Existing Connections</h2>
+        <div id="connectionList">Loading...</div>
+    </div>
+
+    <div id="sessionModal" class="card" style="display:none; border: 2px solid #0066cc;">
+        <h2>Session Created</h2>
+        <p>Use the following details to connect your MCP client:</p>
+        <p><strong>MCP Endpoint:</strong> <code id="mcpEndpoint"></code></p>
+        <p><strong>Authorization Header:</strong></p>
+        <div class="token-display" id="tokenDisplay" style="display:block;"></div>
+        <button onclick="document.getElementById('sessionModal').style.display='none'">Close</button>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
