@@ -10,6 +10,11 @@ export interface IntradayStats {
     signal: number;
     histogram: number;
   };
+  bollinger?: {
+    upper: number;
+    middle: number;
+    lower: number;
+  };
   bars: Bar[];
 }
 
@@ -76,16 +81,42 @@ export async function enrichIntraday(
     // Calculate MACD (12, 26, 9)
     const macd = calculateMACD(bars, 12, 26, 9);
 
+    // Calculate Bollinger Bands (20, 2)
+    const bollinger = calculateBollingerBands(bars, 20, 2);
+
     result[symbol] = {
         vwap,
         atr,
         rsi,
         macd,
+        bollinger,
         bars
     };
   }
 
   return result;
+}
+
+function calculateBollingerBands(
+  bars: Bar[],
+  period: number = 20,
+  multiplier: number = 2
+): { upper: number; middle: number; lower: number } | undefined {
+  if (bars.length < period) return undefined;
+
+  const slice = bars.slice(bars.length - period);
+  const sum = slice.reduce((acc, bar) => acc + bar.close, 0);
+  const middle = sum / period;
+
+  const squaredDiffs = slice.map(bar => Math.pow(bar.close - middle, 2));
+  const variance = squaredDiffs.reduce((acc, val) => acc + val, 0) / period;
+  const stdDev = Math.sqrt(variance);
+
+  return {
+      upper: middle + (stdDev * multiplier),
+      middle: middle,
+      lower: middle - (stdDev * multiplier)
+  };
 }
 
 function calculateRSI(bars: Bar[], period: number = 14): number | undefined {
