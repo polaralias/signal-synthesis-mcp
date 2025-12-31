@@ -10,16 +10,17 @@ RUN apt-get update -y && apt-get install -y openssl
 
 # Copy package.json and package-lock.json
 COPY package*.json ./
-# Copy prisma directory (needed for prisma generate during install)
+# Copy prisma directory (needed for prisma generate during install/build)
 COPY prisma ./prisma
 
 # Install all dependencies (including devDependencies)
+# This includes 'prisma' CLI (now in devDependencies)
 RUN npm ci
 
 # Copy the rest of the application code
 COPY . .
 
-# Build the TypeScript code
+# Build the TypeScript code (includes prisma generate)
 RUN npm run build
 
 # Production stage
@@ -32,12 +33,18 @@ RUN apt-get update -y && apt-get install -y openssl
 
 # Copy package files
 COPY package*.json ./
-# Copy prisma directory (needed for prisma generate during postinstall)
+# Copy prisma directory (some users/tools rely on schema presence)
 COPY prisma ./prisma
 
 # Install only production dependencies
-# This will trigger postinstall (prisma generate) which works because 'prisma' is in dependencies
-RUN npm ci --omit=dev
+# Use --ignore-scripts to prevent 'postinstall' (prisma generate) from running,
+# as the 'prisma' CLI is not available in production dependencies.
+RUN npm ci --omit=dev --ignore-scripts
+
+# Copy generated Prisma Client from builder
+# The client is typically generated in node_modules/.prisma and node_modules/@prisma/client
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
 # Copy built artifacts from builder
 COPY --from=builder /app/dist ./dist
