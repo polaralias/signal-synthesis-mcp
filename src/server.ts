@@ -1,10 +1,9 @@
 import express from 'express';
 import cors from 'cors';
-import crypto from 'crypto';
 import path from 'path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
   CallToolRequestSchema,
   ErrorCode,
@@ -12,7 +11,7 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { config } from './config';
-import { Router, CacheProviderFactory } from './routing/index';
+import { Router } from './routing/index';
 import { z } from 'zod';
 import { discoverCandidates } from './tools/discovery';
 import { filterTradeable } from './tools/filters';
@@ -20,9 +19,6 @@ import { enrichIntraday, enrichContext, enrichEod } from './tools/enrichment';
 import { rankSetups } from './tools/ranking';
 import { explainRouting } from './tools/debug';
 import { planAndRun } from './tools/orchestrator';
-import apiRouter from './routes/api';
-import { ConnectionManager } from './models/connection';
-import { RedisCachingMarketDataProvider } from './providers/redis';
 
 export class FinancialServer {
   private server: Server | null = null;
@@ -313,99 +309,36 @@ export class FinancialServer {
         credentials: true
       }));
 
-      const transports = new Map<string, SSEServerTransport>();
-
-      // Mount API routes
-      app.use('/api', apiRouter);
-
       // Serve static files for UI
       app.use(express.static(path.join(__dirname, '../public')));
 
-      app.get('/mcp', async (req, res) => {
-        // Set headers for SSE to avoid buffering
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        res.setHeader('X-Accel-Buffering', 'no'); // Crucial for Nginx
+      // Initialize global router/server for HTTP mode
+      // NOTE: In the previous model, we created a new server per session to allow per-session config.
+      // The current requirement is to simplify. We will use the default router (global config).
+      // If we need dynamic config later, we can re-introduce it.
+      const server = this.createMcpServer(this.defaultRouter);
 
-        // Authenticate Session
-        let token = req.query.token as string;
-        if (!token && req.headers.authorization) {
-          const auth = req.headers.authorization;
-          if (auth.startsWith('Bearer ')) {
-            token = auth.substring(7);
+      app.all('/mcp', async (req, res) => {
+        // Simple Bearer Token Auth
+        const bearerToken = process.env.MCP_BEARER_TOKEN;
+        if (bearerToken) {
+          const authHeader = req.headers.authorization;
+          if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader.substring(7) !== bearerToken) {
+             res.status(401).send('Unauthorized');
+             return;
           }
         }
 
-        let session;
-        let configToUse: Record<string, any> = {};
-        let cacheFactory: CacheProviderFactory | undefined;
+        // Create Streamable Transport per request
+        const transport = new StreamableHTTPServerTransport();
 
-        if (token) {
-           session = await ConnectionManager.validateSession(token);
-           if (!session) {
-             res.status(401).send('Invalid or expired session token');
-             return;
-           }
-
-           // Merge config and credentials
-           configToUse = {
-             ...(session.connection.config as Record<string, any>),
-             ...session.connection.decryptedCredentials
-           };
-
-           // Configure Cache Factory for Redis
-           // We capture session ID here for isolation
-           const sessionId = session.id;
-           cacheFactory = (provider, ttlMs) => {
-               return new RedisCachingMarketDataProvider(provider, sessionId, '1', ttlMs);
-           };
-
-        } else {
-           // Fallback to legacy query params
-           const query = req.query as Record<string, string>;
-           const configKeys = [
-            'ALPACA_API_KEY', 'ALPACA_SECRET_KEY',
-            'POLYGON_API_KEY', 'FMP_API_KEY', 'FINNHUB_API_KEY',
-            'ENABLE_CACHING', 'CACHE_TTL'
-           ];
-           configKeys.forEach(key => {
-             if (query[key]) {
-                if (key === 'ENABLE_CACHING') configToUse[key] = query[key] === 'true';
-                else if (key === 'CACHE_TTL') configToUse[key] = parseInt(query[key], 10);
-                else configToUse[key] = query[key];
-             }
-           });
-        }
-
-        // Create a new router with the session config and cache factory
-        const router = new Router(configToUse, cacheFactory);
-
-        // Create a new MCP Server instance for this session
-        const server = this.createMcpServer(router);
-
-        // Generate session ID (use the persistent session ID if available, else random)
-        const transportSessionId = session ? session.id : crypto.randomUUID();
-
-        const transport = new SSEServerTransport(`/messages?sessionId=${transportSessionId}`, res);
+        // Connect the transport to the server for this request cycle
+        // Note: The SDK's Server class supports multiple connections.
         await server.connect(transport);
 
-        transports.set(transportSessionId, transport);
-
-        transport.onclose = () => {
-             transports.delete(transportSessionId);
-             server.close(); // Clean up server resources
-        };
-      });
-
-      app.post('/messages', async (req, res) => {
-        const sessionId = req.query.sessionId as string;
-        const transport = transports.get(sessionId);
-        if (transport) {
-          await transport.handlePostMessage(req, res);
-        } else {
-          res.status(404).send('Session not found');
-        }
+        // Handle the request
+        // The transport will handle writing the response
+        await transport.handleRequest(req, res);
       });
 
       app.listen(port, () => {
@@ -413,7 +346,7 @@ export class FinancialServer {
       });
 
       process.on('SIGINT', async () => {
-        // We can't easily close all dynamic servers, but the process exit will handle it.
+        await server.close();
         process.exit(0);
       });
 
