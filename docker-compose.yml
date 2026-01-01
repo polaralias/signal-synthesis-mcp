@@ -13,9 +13,6 @@ services:
     depends_on:
       - db
       - cache
-    volumes:
-      - .:/app
-      - /app/node_modules
 
   db:
     image: postgres:16-alpine
