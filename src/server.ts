@@ -19,23 +19,25 @@ import { enrichIntraday, enrichContext, enrichEod } from './tools/enrichment';
 import { rankSetups } from './tools/ranking';
 import { explainRouting } from './tools/debug';
 import { planAndRun } from './tools/orchestrator';
-import { hashToken, verifyToken, decrypt } from './services/security';
+import { hashToken, verifyToken, decrypt, generateRandomString } from './services/security';
 import connectRouter from './routes/connect';
 import tokenRouter from './routes/token';
 import metadataRouter from './routes/metadata';
 import { ConfigType } from './config-schema';
-import prisma from './db';
+import { prisma } from './services/database';
+import { requestContext } from './context';
 
 export class FinancialServer {
   private server: Server | null = null;
   // Keep a default router for Stdio or fallback
   private defaultRouter: Router;
+  private sessions = new Map<string, StreamableHTTPServerTransport>();
 
   constructor() {
     this.defaultRouter = new Router();
   }
 
-  private createMcpServer(router: Router): Server {
+  private createMcpServer(): Server {
     const server = new Server(
       {
         name: 'financial-mcp-server',
@@ -48,7 +50,7 @@ export class FinancialServer {
       }
     );
 
-    this.setupToolHandlers(server, router);
+    this.setupToolHandlers(server);
 
     // Error handling
     server.onerror = (error) => console.error('[MCP Error]', error);
@@ -56,7 +58,7 @@ export class FinancialServer {
     return server;
   }
 
-  private setupToolHandlers(server: Server, router: Router) {
+  private setupToolHandlers(server: Server) {
     server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
         {
@@ -206,6 +208,10 @@ export class FinancialServer {
 
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
+      const context = requestContext.getStore();
+
+      // If no context is available (e.g. stdio), fallback to defaultRouter
+      const router = context ? context.router : this.defaultRouter;
 
       if (name === 'plan_and_run') {
         const schema = z.object({
@@ -301,6 +307,9 @@ export class FinancialServer {
   }
 
   async start() {
+    // Create the MCP Server instance once at startup
+    this.server = this.createMcpServer();
+
     const port = process.env.PORT;
 
     if (port) {
@@ -356,12 +365,60 @@ export class FinancialServer {
         }
 
         // Create a new Router with the connection-specific configuration
+        // We handle connectionConfig being null by ! because we return early on error above
         const requestRouter = new Router(connectionConfig!);
 
-        const serverInstance = this.createMcpServer(requestRouter);
-        const transport = new StreamableHTTPServerTransport();
-        await serverInstance.connect(transport);
-        await transport.handleRequest(req, res);
+        // Accept header normalization
+        if (!req.headers.accept || req.headers.accept === '*/*') {
+          req.headers.accept = 'application/json, text/event-stream';
+        }
+
+        // Also normalize Accept if it is just application/json (SDK might be strict)
+        // Actually, the SDK requires "application/json" AND "text/event-stream" or just "text/event-stream" depending on strictness.
+        // The error message says: "Client must accept both application/json and text/event-stream"
+        // So we should enforce that if it is missing one of them.
+
+        // However, if the client sends just 'application/json', we should append text/event-stream?
+        // Let's force it to be what the SDK wants if it is not totally specific.
+
+        // Let's rely on the previous normalization for */* and empty.
+        // If the client sends 'application/json', we should probably append ', text/event-stream'.
+        if (req.headers.accept === 'application/json') {
+             req.headers.accept = 'application/json, text/event-stream';
+        }
+
+        const sessionId = req.headers['mcp-session-id'] as string;
+        let transport: StreamableHTTPServerTransport;
+
+        if (sessionId && this.sessions.has(sessionId)) {
+          transport = this.sessions.get(sessionId)!;
+        } else {
+          transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: () => generateRandomString(16),
+            onsessioninitialized: (id) => {
+              this.sessions.set(id, transport);
+            },
+            onsessionclosed: (id) => {
+              this.sessions.delete(id);
+            }
+          });
+
+          transport.onclose = () => {
+             // Clean up defensively - although onsessionclosed should handle it
+             for (const [id, t] of this.sessions.entries()) {
+               if (t === transport) {
+                 this.sessions.delete(id);
+                 break;
+               }
+             }
+          };
+
+          await this.server!.connect(transport);
+        }
+
+        await requestContext.run({ router: requestRouter }, async () => {
+          await transport.handleRequest(req, res);
+        });
       });
 
       app.listen(port, () => {
@@ -377,13 +434,12 @@ export class FinancialServer {
 
     } else {
       // Stdio mode
-      const server = this.createMcpServer(this.defaultRouter);
       const transport = new StdioServerTransport();
-      await server.connect(transport);
+      await this.server!.connect(transport);
       console.error('Financial MCP Server running on stdio');
 
       process.on('SIGINT', async () => {
-        await server.close();
+        await this.server!.close();
         process.exit(0);
       });
     }
