@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { hashCode, verifyPkce, generateRandomString, hashToken } from '../services/security';
 import { prisma } from '../services/database';
+import { rateLimit } from '../middleware/rateLimit';
 
 const router = express.Router();
 
@@ -14,7 +15,8 @@ const TokenRequestSchema = z.object({
   redirect_uri: z.string().url(),
 });
 
-router.post('/token', express.json(), express.urlencoded({ extended: true }), async (req, res) => {
+// Rate limit: 10 requests per minute
+router.post('/token', rateLimit({ windowMs: 60 * 1000, max: 10, key: 'token' }), express.json(), express.urlencoded({ extended: true }), async (req, res) => {
     try {
         const body = TokenRequestSchema.parse(req.body);
 

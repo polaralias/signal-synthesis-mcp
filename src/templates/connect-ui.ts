@@ -1,7 +1,7 @@
-import { getConfigMetadata } from '../config-schema';
+import { getConfigFields } from '../config-schema';
 
 export function renderConnectPage(redirectUri: string, state: string, codeChallenge: string, codeChallengeMethod: string, csrfToken: string): string {
-  const fields = getConfigMetadata();
+  const fields = getConfigFields();
 
   const formFields = fields.map(field => `
     <div class="mb-4">

@@ -14,8 +14,30 @@ export const ConfigSchema = z.object({
 
 export type ConfigType = z.infer<typeof ConfigSchema>;
 
+export function getMcpConfig() {
+  const fields = getConfigFields().map(f => ({
+    key: f.name,
+    label: f.name.replace(/_/g, ' ').replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase()))), // Simple title case
+    type: f.type,
+    required: f.required,
+    secret: f.secret,
+    default: "",
+    enum: f.enum || [],
+    help: f.description
+  }));
+
+  return {
+    id: "financial-mcp-server",
+    name: "Financial MCP Server",
+    description: "Financial analysis and trading tools",
+    version: "1.0.0",
+    fields: fields
+  };
+}
+
 // Helper to get schema metadata for UI generation
-export function getConfigMetadata() {
+// Kept for backward compatibility and internal use
+export function getConfigFields() {
   const shape = ConfigSchema.shape;
   const metadata = Object.entries(shape).map(([key, schema]) => {
     let description = '';
@@ -39,8 +61,12 @@ export function getConfigMetadata() {
       type: 'string', // Assuming all are strings for simplicity for now
       required: !isOptional,
       secret: key.includes('KEY') || key.includes('SECRET'), // Heuristic for secret fields
-      description
+      description,
+      enum: [] // Placeholder for future enum extraction if needed
     };
   });
   return metadata;
 }
+
+// Deprecated export for backward compatibility if imported elsewhere by name, though we changed the implementation to match old return type
+export const getConfigMetadata = getConfigFields;

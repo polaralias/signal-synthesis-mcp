@@ -1,10 +1,10 @@
 import express from 'express';
-import { getConfigMetadata } from '../config-schema';
+import { getMcpConfig } from '../config-schema';
 
 const router = express.Router();
 
 router.get('/.well-known/mcp-config', (req, res) => {
-  const metadata = getConfigMetadata();
+  const metadata = getMcpConfig();
   res.json(metadata);
 });
 

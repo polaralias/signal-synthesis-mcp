@@ -5,12 +5,13 @@ import { renderConnectPage } from '../templates/connect-ui';
 import { ConfigSchema } from '../config-schema';
 import { encrypt, generateRandomString, hashCode } from '../services/security';
 import { prisma } from '../services/database';
+import { validateRedirectUri } from '../utils/validation';
+import { rateLimit } from '../middleware/rateLimit';
 
 const router = express.Router();
 router.use(cookieParser());
 
 const CODE_TTL_SECONDS = parseInt(process.env.CODE_TTL_SECONDS || '90', 10);
-const REDIRECT_URI_ALLOWLIST = (process.env.REDIRECT_URI_ALLOWLIST || '').split(',').map(s => s.trim()).filter(Boolean);
 
 // Validation for GET /connect
 const ConnectQuerySchema = z.object({
@@ -26,7 +27,7 @@ router.get('/connect', (req, res) => {
     const query = ConnectQuerySchema.parse(req.query);
 
     // Validate redirect_uri against allowlist
-    if (REDIRECT_URI_ALLOWLIST.length > 0 && !REDIRECT_URI_ALLOWLIST.includes(query.redirect_uri)) {
+    if (!validateRedirectUri(query.redirect_uri)) {
       res.status(400).send('Invalid redirect_uri');
       return;
     }
@@ -59,7 +60,8 @@ router.get('/connect', (req, res) => {
 });
 
 // POST /connect
-router.post('/connect', express.urlencoded({ extended: true }), async (req, res) => {
+// Rate limit: 20 requests per minute
+router.post('/connect', rateLimit({ windowMs: 60 * 1000, max: 20, key: 'connect' }), express.urlencoded({ extended: true }), async (req, res) => {
     try {
         // CSRF Verification
         const csrfCookie = req.cookies.csrfToken;
@@ -74,7 +76,7 @@ router.post('/connect', express.urlencoded({ extended: true }), async (req, res)
         const body = ConnectQuerySchema.parse(req.body);
 
          // Validate redirect_uri against allowlist
-        if (REDIRECT_URI_ALLOWLIST.length > 0 && !REDIRECT_URI_ALLOWLIST.includes(body.redirect_uri)) {
+        if (!validateRedirectUri(body.redirect_uri)) {
             res.status(400).send('Invalid redirect_uri');
             return;
         }
@@ -128,7 +130,12 @@ router.post('/connect', express.urlencoded({ extended: true }), async (req, res)
             res.status(400).send(`Invalid request: ${error.errors.map(e => e.message).join(', ')}`);
         } else {
             console.error('Error in POST /connect', error);
-            res.redirect(`${req.body.redirect_uri}?error=server_error&state=${req.body.state}`);
+            // Try to redirect with error if redirect_uri is available and valid-ish, otherwise error page
+            if (req.body.redirect_uri && validateRedirectUri(req.body.redirect_uri)) {
+                res.redirect(`${req.body.redirect_uri}?error=server_error&state=${req.body.state}`);
+            } else {
+                 res.status(500).send('Internal Server Error');
+            }
         }
     }
 });

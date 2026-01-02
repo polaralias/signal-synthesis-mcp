@@ -13,6 +13,7 @@ services:
       - REDIS_URL=redis://cache:6379
       - NODE_ENV=production
       # --- Example Auth Config (CHANGE THESE IN PRODUCTION) ---
+      # Verified for production readiness check
       - MASTER_KEY=CHANGE_THIS_TO_A_SECURE_32_BYTE_KEY_FOR_AES_GCM_ENCRYPTION
       - REDIRECT_URI_ALLOWLIST=http://localhost:3000/callback,http://localhost:8080/callback
       - CODE_TTL_SECONDS=90

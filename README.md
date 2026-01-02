@@ -41,6 +41,7 @@ The server requires secure configuration for authentication.
 - `TOKEN_TTL_SECONDS`: (Optional) Expiry time for access tokens in seconds (default: 3600).
 - `DATABASE_URL`: Connection string for PostgreSQL.
 - `REDIS_URL`: Connection string for Redis.
+- `REDIRECT_URI_ALLOWLIST_MODE`: (Optional) Validation mode for redirect URIs: `exact` (default) or `prefix`.
 
 **Docker Compose Example:**
 
@@ -88,3 +89,12 @@ To test:
 ```bash
 npm test
 ```
+
+## Smoke Test
+
+A PowerShell smoke test script is provided in `scripts/smoke-test.ps1` to verify the authentication flow and MCP endpoint.
+
+1. Open `http://localhost:3000/connect...` in your browser and complete the setup.
+2. Run the script: `.\scripts\smoke-test.ps1`
+3. Enter the requested information (Base URL, Code, Verifier).
+4. The script will exchange the code for a token and list available tools.

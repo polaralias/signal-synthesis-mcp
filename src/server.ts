@@ -23,6 +23,7 @@ import { hashToken, verifyToken, decrypt, generateRandomString } from './service
 import connectRouter from './routes/connect';
 import tokenRouter from './routes/token';
 import metadataRouter from './routes/metadata';
+import oauthRouter from './routes/oauth';
 import { ConfigType } from './config-schema';
 import { prisma } from './services/database';
 import { requestContext } from './context';
@@ -317,7 +318,8 @@ export class FinancialServer {
       const app = express();
 
       // Trust proxy for correct protocol/IP handling behind reverse proxies
-      app.set('trust proxy', true);
+      // Trust first proxy (e.g. Nginx/Traefik sidecar)
+      app.set('trust proxy', 1);
 
       // Enable CORS
       app.use(cors({
@@ -331,6 +333,12 @@ export class FinancialServer {
       app.use(connectRouter);
       app.use(tokenRouter);
       app.use(metadataRouter);
+      app.use(oauthRouter);
+
+      // Health Check
+      app.get('/health', (req, res) => {
+        res.json({ status: 'ok' });
+      });
 
       // Serve static files for UI (if any other than dynamically served)
       app.use(express.static(path.join(__dirname, '../public')));
