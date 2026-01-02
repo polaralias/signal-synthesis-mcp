@@ -8,12 +8,13 @@ A specialized MCP server for financial analysis and trading signal generation.
 - Intelligent candidate discovery based on trading intent
 - Automated trade setup ranking
 - Multi-provider support (Alpaca, Polygon, FMP, Finnhub)
+- Secure OAuth-style Authentication
 
 ## Getting Started
 
 ### Prerequisites
 - Node.js 18+
-- Docker (optional, for Redis/Postgres)
+- Docker & Docker Compose
 - API Keys for at least one provider (Alpaca, Polygon, etc.)
 
 ### Installation
@@ -22,14 +23,40 @@ A specialized MCP server for financial analysis and trading signal generation.
    ```bash
    npm install
    ```
-3. Configure environment variables in `.env`:
+3. Set up the database:
    ```bash
-   PORT=3000
-   ALPACA_API_KEY=...
-   ALPACA_SECRET_KEY=...
-   # ... other keys
-   MCP_BEARER_TOKEN=my-secret-token # Optional, for auth
+   docker compose up -d
+   npx prisma db push
    ```
+
+### Configuration & Authentication
+
+The server requires secure configuration for authentication.
+
+**Environment Variables:**
+
+- `MASTER_KEY`: **Required**. A string used to derive the encryption key for storing configuration at rest. Must be kept secret.
+- `REDIRECT_URI_ALLOWLIST`: **Required**. Comma-separated list of allowed redirect URIs for the auth flow.
+- `CODE_TTL_SECONDS`: (Optional) Expiry time for auth codes in seconds (default: 90).
+- `TOKEN_TTL_SECONDS`: (Optional) Expiry time for access tokens in seconds (default: 3600).
+- `DATABASE_URL`: Connection string for PostgreSQL.
+- `REDIS_URL`: Connection string for Redis.
+
+**Docker Compose Example:**
+
+The provided `docker-compose.yml` includes **unsafe example values** for development:
+- `MASTER_KEY=CHANGE_THIS_TO_A_SECURE_32_BYTE_KEY_FOR_AES_GCM_ENCRYPTION`
+- `REDIRECT_URI_ALLOWLIST=http://localhost:3000/callback,http://localhost:8080/callback`
+
+**IMPORTANT:** You **MUST** change these values in a production environment.
+
+### Connect Flow
+
+1. Navigate to `http://localhost:3000/connect` (with required PKCE parameters).
+   - Example: `http://localhost:3000/connect?redirect_uri=http://localhost:3000/callback&state=123&code_challenge=...&code_challenge_method=S256`
+2. Enter your API keys and configuration in the UI.
+3. Upon submission, you will be redirected to your client with an authorization code.
+4. Exchange the code for an access token via `POST /token`.
 
 ### Running the Server
 
@@ -39,14 +66,7 @@ The server runs on HTTP by default.
 npm start
 ```
 - Endpoint: `http://localhost:3000/mcp`
-- If `MCP_BEARER_TOKEN` is set, pass it in the `Authorization: Bearer <token>` header.
-
-#### Stdio Transport
-To run in Stdio mode (e.g. for direct MCP client usage via command line):
-```bash
-# Ensure PORT is NOT set in env
-npm start
-```
+- Authentication: `Authorization: Bearer <access_token>`
 
 ## Tools
 - `get_quotes`: Fetch real-time quotes
