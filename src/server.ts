@@ -32,6 +32,7 @@ export class FinancialServer {
   // Keep a default router for Stdio or fallback
   private defaultRouter: Router;
   private sessions = new Map<string, StreamableHTTPServerTransport>();
+  private routerCache = new Map<string, Router>();
 
   constructor() {
     this.defaultRouter = new Router();
@@ -324,6 +325,8 @@ export class FinancialServer {
         credentials: true
       }));
 
+      app.use(express.json());
+
       // Register Auth Routes
       app.use(connectRouter);
       app.use(tokenRouter);
@@ -353,38 +356,44 @@ export class FinancialServer {
             return;
         }
 
-        // Decrypt configuration
-        let connectionConfig: ConfigType | null = null;
-        try {
+        // Router caching
+        let requestRouter: Router;
+        const connectionId = session.connection.id;
+
+        if (this.routerCache.has(connectionId)) {
+          if (process.env.DEBUG_MCP) {
+            console.log(`[MCP] Reusing cached router for connection ${connectionId}`);
+          }
+          requestRouter = this.routerCache.get(connectionId)!;
+        } else {
+          if (process.env.DEBUG_MCP) {
+            console.log(`[MCP] Creating new router for connection ${connectionId}`);
+          }
+          // Decrypt configuration
+          let connectionConfig: ConfigType | null = null;
+          try {
             const configString = decrypt(session.connection.configEncrypted);
             connectionConfig = JSON.parse(configString);
-        } catch (e) {
+          } catch (e) {
             console.error('Failed to decrypt config for connection', session.connection.id, e);
             res.status(500).send('Internal Server Error: Failed to load configuration');
             return;
-        }
+          }
 
-        // Create a new Router with the connection-specific configuration
-        // We handle connectionConfig being null by ! because we return early on error above
-        const requestRouter = new Router(connectionConfig!);
+          // Create a new Router with the connection-specific configuration
+          requestRouter = new Router(connectionConfig!);
+          this.routerCache.set(connectionId, requestRouter);
+        }
 
         // Accept header normalization
-        if (!req.headers.accept || req.headers.accept === '*/*') {
+        const accept = (req.headers.accept || "").toLowerCase().trim();
+        if (
+          !accept ||
+          accept === '*/*' ||
+          !accept.includes('application/json') ||
+          !accept.includes('text/event-stream')
+        ) {
           req.headers.accept = 'application/json, text/event-stream';
-        }
-
-        // Also normalize Accept if it is just application/json (SDK might be strict)
-        // Actually, the SDK requires "application/json" AND "text/event-stream" or just "text/event-stream" depending on strictness.
-        // The error message says: "Client must accept both application/json and text/event-stream"
-        // So we should enforce that if it is missing one of them.
-
-        // However, if the client sends just 'application/json', we should append text/event-stream?
-        // Let's force it to be what the SDK wants if it is not totally specific.
-
-        // Let's rely on the previous normalization for */* and empty.
-        // If the client sends 'application/json', we should probably append ', text/event-stream'.
-        if (req.headers.accept === 'application/json') {
-             req.headers.accept = 'application/json, text/event-stream';
         }
 
         const sessionId = req.headers['mcp-session-id'] as string;
@@ -417,7 +426,7 @@ export class FinancialServer {
         }
 
         await requestContext.run({ router: requestRouter }, async () => {
-          await transport.handleRequest(req, res);
+          await transport.handleRequest(req, res, req.body);
         });
       });
 
