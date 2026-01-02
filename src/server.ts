@@ -22,7 +22,7 @@ import { planAndRun } from './tools/orchestrator';
 import { hashToken, verifyToken, decrypt, generateRandomString } from './services/security';
 import connectRouter from './routes/connect';
 import tokenRouter from './routes/token';
-import metadataRouter from './routes/metadata';
+import wellKnownRouter from './routes/well-known';
 import { ConfigType } from './config-schema';
 import { prisma } from './services/database';
 import { requestContext } from './context';
@@ -317,7 +317,12 @@ export class FinancialServer {
       const app = express();
 
       // Trust proxy for correct protocol/IP handling behind reverse proxies
-      app.set('trust proxy', true);
+      app.set('trust proxy', 1);
+
+      // Health Check
+      app.get('/health', (req, res) => {
+        res.json({ status: 'ok' });
+      });
 
       // Enable CORS
       app.use(cors({
@@ -330,7 +335,7 @@ export class FinancialServer {
       // Register Auth Routes
       app.use(connectRouter);
       app.use(tokenRouter);
-      app.use(metadataRouter);
+      app.use(wellKnownRouter);
 
       // Serve static files for UI (if any other than dynamically served)
       app.use(express.static(path.join(__dirname, '../public')));

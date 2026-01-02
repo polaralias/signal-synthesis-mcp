@@ -17,7 +17,7 @@ export type ConfigType = z.infer<typeof ConfigSchema>;
 // Helper to get schema metadata for UI generation
 export function getConfigMetadata() {
   const shape = ConfigSchema.shape;
-  const metadata = Object.entries(shape).map(([key, schema]) => {
+  const fields = Object.entries(shape).map(([key, schema]) => {
     let description = '';
     let isOptional = false;
 
@@ -35,12 +35,22 @@ export function getConfigMetadata() {
     }
 
     return {
-      name: key,
+      key: key,
+      label: key,
       type: 'string', // Assuming all are strings for simplicity for now
       required: !isOptional,
       secret: key.includes('KEY') || key.includes('SECRET'), // Heuristic for secret fields
-      description
+      default: "",
+      enum: [] as string[],
+      help: description || "Where to find this value"
     };
   });
-  return metadata;
+
+  return {
+    id: "financial-mcp-server",
+    name: "Financial MCP Server",
+    description: "Financial data server",
+    version: "1.0.0",
+    fields
+  };
 }

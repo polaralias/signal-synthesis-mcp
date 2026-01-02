@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { hashCode, verifyPkce, generateRandomString, hashToken } from '../services/security';
 import { prisma } from '../services/database';
+import { checkRateLimit } from '../services/ratelimit';
 
 const router = express.Router();
 
@@ -16,6 +17,12 @@ const TokenRequestSchema = z.object({
 
 router.post('/token', express.json(), express.urlencoded({ extended: true }), async (req, res) => {
     try {
+        const ip = req.ip || 'unknown';
+        if (!checkRateLimit(`token:${ip}`, 10, 60)) {
+             res.status(429).json({ error: 'invalid_request', error_description: 'Too Many Requests' });
+             return;
+        }
+
         const body = TokenRequestSchema.parse(req.body);
 
         const codeHash = hashCode(body.code);
