@@ -19,10 +19,16 @@ import { enrichIntraday, enrichContext, enrichEod } from './tools/enrichment';
 import { rankSetups } from './tools/ranking';
 import { explainRouting } from './tools/debug';
 import { planAndRun } from './tools/orchestrator';
+import { hashToken, verifyToken, decrypt } from './services/security';
+import connectRouter from './routes/connect';
+import tokenRouter from './routes/token';
+import metadataRouter from './routes/metadata';
+import { ConfigType } from './config-schema';
+import prisma from './db';
 
 export class FinancialServer {
   private server: Server | null = null;
-  // Keep a default router for Stdio or fallback, but we will create per-request routers for HTTP
+  // Keep a default router for Stdio or fallback
   private defaultRouter: Router;
 
   constructor() {
@@ -309,35 +315,52 @@ export class FinancialServer {
         credentials: true
       }));
 
-      // Serve static files for UI
+      // Register Auth Routes
+      app.use(connectRouter);
+      app.use(tokenRouter);
+      app.use(metadataRouter);
+
+      // Serve static files for UI (if any other than dynamically served)
       app.use(express.static(path.join(__dirname, '../public')));
 
-      // Initialize global router/server for HTTP mode
-      // NOTE: In the previous model, we created a new server per session to allow per-session config.
-      // The current requirement is to simplify. We will use the default router (global config).
-      // If we need dynamic config later, we can re-introduce it.
-      const server = this.createMcpServer(this.defaultRouter);
-
       app.all('/mcp', async (req, res) => {
-        // Simple Bearer Token Auth
-        const bearerToken = process.env.MCP_BEARER_TOKEN;
-        if (bearerToken) {
-          const authHeader = req.headers.authorization;
-          if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader.substring(7) !== bearerToken) {
-             res.status(401).send('Unauthorized');
-             return;
-          }
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+           res.status(401).send('Unauthorized');
+           return;
         }
 
-        // Create Streamable Transport per request
+        const token = authHeader.substring(7);
+        const tokenHash = await hashToken(token);
+
+        // Verify token against database
+        const session = await prisma.session.findUnique({
+            where: { tokenHash },
+            include: { connection: true }
+        });
+
+        if (!session || new Date() > session.expiresAt) {
+            res.status(401).send('Unauthorized: Invalid or expired token');
+            return;
+        }
+
+        // Decrypt configuration
+        let connectionConfig: ConfigType | null = null;
+        try {
+            const configString = decrypt(session.connection.configEncrypted);
+            connectionConfig = JSON.parse(configString);
+        } catch (e) {
+            console.error('Failed to decrypt config for connection', session.connection.id, e);
+            res.status(500).send('Internal Server Error: Failed to load configuration');
+            return;
+        }
+
+        // Create a new Router with the connection-specific configuration
+        const requestRouter = new Router(connectionConfig!);
+
+        const serverInstance = this.createMcpServer(requestRouter);
         const transport = new StreamableHTTPServerTransport();
-
-        // Connect the transport to the server for this request cycle
-        // Note: The SDK's Server class supports multiple connections.
-        await server.connect(transport);
-
-        // Handle the request
-        // The transport will handle writing the response
+        await serverInstance.connect(transport);
         await transport.handleRequest(req, res);
       });
 
@@ -346,7 +369,9 @@ export class FinancialServer {
       });
 
       process.on('SIGINT', async () => {
-        await server.close();
+        if (this.server) {
+            await this.server.close();
+        }
         process.exit(0);
       });
 
