@@ -1,22 +1,23 @@
 import { getConfigMetadata } from '../config-schema';
 
 export function renderConnectPage(redirectUri: string, state: string, codeChallenge: string, codeChallengeMethod: string, csrfToken: string): string {
-  const fields = getConfigMetadata();
+  const metadata = getConfigMetadata();
+  const fields = metadata.fields;
 
   const formFields = fields.map(field => `
     <div class="mb-4">
-      <label class="block text-gray-700 text-sm font-bold mb-2" for="${field.name}">
-        ${field.description || field.name}
+      <label class="block text-gray-700 text-sm font-bold mb-2" for="${field.key}">
+        ${field.label}
         ${field.required ? '<span class="text-red-500">*</span>' : ''}
       </label>
       <input
         class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-        id="${field.name}"
-        name="${field.name}"
+        id="${field.key}"
+        name="${field.key}"
         type="${field.secret ? 'password' : 'text'}"
         ${field.required ? 'required' : ''}
       >
-      ${field.description ? `<p class="text-gray-600 text-xs italic mt-1">${field.description}</p>` : ''}
+      ${field.help ? `<p class="text-gray-600 text-xs italic mt-1">${field.help}</p>` : ''}
     </div>
   `).join('');
 

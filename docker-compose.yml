@@ -17,6 +17,7 @@ services:
       - REDIRECT_URI_ALLOWLIST=http://localhost:3000/callback,http://localhost:8080/callback
       - CODE_TTL_SECONDS=90
       - TOKEN_TTL_SECONDS=3600
+      - REDIRECT_URI_ALLOWLIST_MODE=exact
       # -------------------------------------------------------
     depends_on:
       - db

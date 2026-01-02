@@ -39,6 +39,7 @@ The server requires secure configuration for authentication.
 - `REDIRECT_URI_ALLOWLIST`: **Required**. Comma-separated list of allowed redirect URIs for the auth flow.
 - `CODE_TTL_SECONDS`: (Optional) Expiry time for auth codes in seconds (default: 90).
 - `TOKEN_TTL_SECONDS`: (Optional) Expiry time for access tokens in seconds (default: 3600).
+- `REDIRECT_URI_ALLOWLIST_MODE`: (Optional) Validation mode: `exact` (default) or `prefix`.
 - `DATABASE_URL`: Connection string for PostgreSQL.
 - `REDIS_URL`: Connection string for Redis.
 
@@ -49,8 +50,18 @@ The provided `docker-compose.yml` includes **unsafe example values** for develop
 - `REDIRECT_URI_ALLOWLIST=http://localhost:3000/callback,http://localhost:8080/callback`
 - `CODE_TTL_SECONDS=90`
 - `TOKEN_TTL_SECONDS=3600`
+- `REDIRECT_URI_ALLOWLIST_MODE=exact`
 
 **IMPORTANT:** You **MUST** change these values in a production environment.
+
+### Smoke Test
+
+A PowerShell script is provided to verify the authentication flow and server status.
+
+1. Navigate to `http://localhost:3000/connect...` in your browser and complete the flow to get a `code`.
+2. Run `scripts/smoke-test.ps1`.
+3. Enter the `BaseUrl`, `Code`, and `CodeVerifier` when prompted.
+4. The script will exchange the code for a token and verify access to MCP tools.
 
 ### Connect Flow
 

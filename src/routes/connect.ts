@@ -5,12 +5,34 @@ import { renderConnectPage } from '../templates/connect-ui';
 import { ConfigSchema } from '../config-schema';
 import { encrypt, generateRandomString, hashCode } from '../services/security';
 import { prisma } from '../services/database';
+import { checkRateLimit } from '../services/ratelimit';
 
 const router = express.Router();
 router.use(cookieParser());
 
 const CODE_TTL_SECONDS = parseInt(process.env.CODE_TTL_SECONDS || '90', 10);
 const REDIRECT_URI_ALLOWLIST = (process.env.REDIRECT_URI_ALLOWLIST || '').split(',').map(s => s.trim()).filter(Boolean);
+const REDIRECT_URI_ALLOWLIST_MODE = process.env.REDIRECT_URI_ALLOWLIST_MODE || 'exact';
+
+function isRedirectUriAllowed(uri: string): boolean {
+    try {
+        const url = new URL(uri);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    } catch {
+        return false;
+    }
+
+    if (REDIRECT_URI_ALLOWLIST.length === 0) return true;
+
+    for (const allowed of REDIRECT_URI_ALLOWLIST) {
+        if (REDIRECT_URI_ALLOWLIST_MODE === 'prefix') {
+             if (uri.startsWith(allowed)) return true;
+        } else {
+             if (uri === allowed) return true;
+        }
+    }
+    return false;
+}
 
 // Validation for GET /connect
 const ConnectQuerySchema = z.object({
@@ -26,7 +48,7 @@ router.get('/connect', (req, res) => {
     const query = ConnectQuerySchema.parse(req.query);
 
     // Validate redirect_uri against allowlist
-    if (REDIRECT_URI_ALLOWLIST.length > 0 && !REDIRECT_URI_ALLOWLIST.includes(query.redirect_uri)) {
+    if (!isRedirectUriAllowed(query.redirect_uri)) {
       res.status(400).send('Invalid redirect_uri');
       return;
     }
@@ -61,6 +83,13 @@ router.get('/connect', (req, res) => {
 // POST /connect
 router.post('/connect', express.urlencoded({ extended: true }), async (req, res) => {
     try {
+        // Rate limiting: 20 req/min per IP
+        const ip = req.ip || 'unknown';
+        if (!checkRateLimit(`connect:${ip}`, 20, 60)) {
+            res.status(429).send('Too Many Requests');
+            return;
+        }
+
         // CSRF Verification
         const csrfCookie = req.cookies.csrfToken;
         const csrfBody = req.body.csrfToken;
@@ -74,7 +103,7 @@ router.post('/connect', express.urlencoded({ extended: true }), async (req, res)
         const body = ConnectQuerySchema.parse(req.body);
 
          // Validate redirect_uri against allowlist
-        if (REDIRECT_URI_ALLOWLIST.length > 0 && !REDIRECT_URI_ALLOWLIST.includes(body.redirect_uri)) {
+        if (!isRedirectUriAllowed(body.redirect_uri)) {
             res.status(400).send('Invalid redirect_uri');
             return;
         }
