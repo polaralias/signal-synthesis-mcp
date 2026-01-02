@@ -1,7 +1,7 @@
 import express from 'express';
 import { z } from 'zod';
 import { hashCode, verifyPkce, generateRandomString, hashToken } from '../services/security';
-import prisma from '../db';
+import { prisma } from '../services/database';
 
 const router = express.Router();
 

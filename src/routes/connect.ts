@@ -4,7 +4,7 @@ import cookieParser from 'cookie-parser';
 import { renderConnectPage } from '../templates/connect-ui';
 import { ConfigSchema } from '../config-schema';
 import { encrypt, generateRandomString, hashCode } from '../services/security';
-import prisma from '../db';
+import { prisma } from '../services/database';
 
 const router = express.Router();
 router.use(cookieParser());

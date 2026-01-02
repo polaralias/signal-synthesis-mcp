@@ -47,6 +47,8 @@ The server requires secure configuration for authentication.
 The provided `docker-compose.yml` includes **unsafe example values** for development:
 - `MASTER_KEY=CHANGE_THIS_TO_A_SECURE_32_BYTE_KEY_FOR_AES_GCM_ENCRYPTION`
 - `REDIRECT_URI_ALLOWLIST=http://localhost:3000/callback,http://localhost:8080/callback`
+- `CODE_TTL_SECONDS=90`
+- `TOKEN_TTL_SECONDS=3600`
 
 **IMPORTANT:** You **MUST** change these values in a production environment.
 
