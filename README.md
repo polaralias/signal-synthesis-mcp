@@ -1,4 +1,4 @@
-# Financial MCP Server
+# Signal Synthesis MCP Server
 
 A specialized MCP server for financial analysis and trading signal generation.
 

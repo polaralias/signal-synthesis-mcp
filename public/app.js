@@ -15,7 +15,7 @@ async function fetchConnections() {
     try {
         const res = await fetch(`${API_BASE}/connections`);
         const connections = await res.json();
-        
+
         if (connections.length === 0) {
             listEl.innerHTML = '<p class="text-center text-gray-500">No connections found.</p>';
             return;
@@ -28,13 +28,13 @@ async function fetchConnections() {
         connections.forEach(c => {
             const div = document.createElement('div');
             div.className = 'flex justify-between items-center p-4 border rounded-lg hover:bg-gray-50 transition-colors';
-            
+
             const infoDiv = document.createElement('div');
-            
+
             const nameStrong = document.createElement('strong');
             nameStrong.className = 'text-gray-800 block';
             nameStrong.textContent = c.name; // Safe XSS prevention
-            
+
             const idSpan = document.createElement('span');
             idSpan.className = 'text-xs text-gray-500 font-mono';
             idSpan.textContent = c.id.substring(0, 8) + '...';
@@ -49,7 +49,7 @@ async function fetchConnections() {
 
             div.appendChild(infoDiv);
             div.appendChild(btn);
-            
+
             listEl.appendChild(div);
         });
     } catch (err) {
@@ -59,14 +59,14 @@ async function fetchConnections() {
 
 async function createConnection(e) {
     e.preventDefault();
-    
+
     const alpacaKey = document.getElementById('alpacaKey').value;
     const alpacaSecret = document.getElementById('alpacaSecret').value;
     const polygonKey = document.getElementById('polygonKey').value;
 
     const data = {
         name: document.getElementById('name').value,
-        serverType: 'financial-mcp',
+        serverType: 'signal-synthesis-mcp',
         config: {},
         credentials: {}
     };
@@ -81,9 +81,9 @@ async function createConnection(e) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
-        
+
         if (!res.ok) throw new Error(await res.text());
-        
+
         const connection = await res.json();
         document.getElementById('createForm').reset();
         await fetchConnections(); // Refresh list
@@ -127,11 +127,11 @@ async function handleConnect(connectionId) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({})
             });
-            
+
             if (!res.ok) throw new Error(await res.text());
-            
+
             const { token } = await res.json();
-            
+
             document.getElementById('mcpEndpoint').textContent = `${window.location.origin}/mcp`;
             document.getElementById('tokenDisplay').textContent = `Bearer ${token}`;
             document.getElementById('sessionModal').classList.remove('hidden');

@@ -19,12 +19,27 @@
         }
     </script>
 </head>
-<body class="bg-gray-50 min-h-screen text-gray-800 font-sans">
-    <div class="max-w-4xl mx-auto p-6">
-        <header class="mb-10 text-center">
-            <h1 class="text-4xl font-extrabold text-gray-900 tracking-tight">Financial MCP</h1>
-            <p class="mt-2 text-lg text-gray-600">Secure Connection Manager</p>
-        </header>
+<body class="bg-slate-50 min-h-screen font-sans selection:bg-blue-100 selection:text-blue-900">
+    <nav class="bg-white border-b border-slate-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21 11-8-8-9 9"></path><path d="M7 8.5 7 22"></path><path d="M17 8.5 17 22"></path><path d="M12 3v19"></path></svg>
+                    </div>
+                    <span class="text-xl font-bold tracking-tight text-slate-900">Signal Synthesis MCP</span>
+                </div>
+                <div class="text-sm font-medium text-slate-500">
+                    Connection Manager v1.0
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div class="text-center mb-12">
+            <h1 class="text-4xl font-extrabold text-gray-900 tracking-tight">Signal Synthesis MCP</h1>
+        </div>
 
         <!-- Authorization Mode Alert -->
         <div id="authModeAlert" class="hidden mb-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r shadow-sm">

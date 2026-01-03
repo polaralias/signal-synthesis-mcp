@@ -28,7 +28,7 @@ export function getConfigMetadata() {
       isOptional = true;
       const inner = s._def.innerType;
       if (inner instanceof z.ZodString || inner._def.typeName === 'ZodString') {
-          description = inner.description || '';
+        description = inner.description || '';
       }
     } else if (s instanceof z.ZodString || s._def.typeName === 'ZodString') {
       description = s.description || '';
@@ -47,9 +47,9 @@ export function getConfigMetadata() {
   });
 
   return {
-    id: "financial-mcp-server",
-    name: "Financial MCP Server",
-    description: "Financial data server",
+    id: "signal-synthesis-mcp",
+    name: "Signal Synthesis MCP Server",
+    description: "Signal synthesis and financial data server",
     version: "1.0.0",
     fields
   };

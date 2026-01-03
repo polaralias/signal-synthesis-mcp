@@ -1,7 +1,7 @@
 {
-  "name": "financial-mcp-server",
+  "name": "signal-synthesis-mcp",
   "version": "1.0.0",
-  "description": "Financial MCP Server",
+  "description": "Signal Synthesis MCP Server",
   "main": "dist/index.js",
   "scripts": {
     "build": "prisma generate && tsc",

@@ -27,15 +27,18 @@ export function renderConnectPage(redirectUri: string, state: string, codeChalle
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Connect Financial MCP Server</title>
+    <title>Connect Signal Synthesis MCP Server</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 h-screen flex items-center justify-center">
-    <div class="w-full max-w-lg bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
-        <div class="mb-6 text-center">
-            <h1 class="text-2xl font-bold text-gray-800">Financial MCP Server</h1>
-            <p class="text-gray-600">Connect and configure your server</p>
-            <p class="text-sm text-gray-500 mt-2">Version 1.0.0</p>
+<body class="bg-gray-50 flex items-center justify-center min-h-screen">
+    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-lg border border-gray-100">
+        <div class="flex items-center space-x-4 mb-8">
+            <div class="bg-indigo-600 p-3 rounded-lg">
+                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                </svg>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-800">Signal Synthesis MCP Server</h1>
         </div>
 
         <form action="/connect" method="POST">

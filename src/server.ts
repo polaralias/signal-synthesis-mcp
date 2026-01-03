@@ -27,7 +27,7 @@ import { ConfigType } from './config-schema';
 import { prisma } from './services/database';
 import { requestContext } from './context';
 
-export class FinancialServer {
+export class SignalSynthesisServer {
   private server: Server | null = null;
   // Keep a default router for Stdio or fallback
   private defaultRouter: Router;
@@ -41,7 +41,7 @@ export class FinancialServer {
   private createMcpServer(): Server {
     const server = new Server(
       {
-        name: 'financial-mcp-server',
+        name: 'signal-synthesis-mcp',
         version: '1.0.0',
       },
       {
@@ -285,19 +285,19 @@ export class FinancialServer {
       }
 
       if (name === 'rank_setups') {
-         const schema = z.object({
-             intradayData: z.record(z.any()),
-             contextData: z.record(z.any()).optional().default({}),
-             eodData: z.record(z.any()).optional().default({}),
-         });
-         const { intradayData, contextData, eodData } = schema.parse(args);
-         const results = rankSetups(intradayData, contextData, eodData);
-         return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+        const schema = z.object({
+          intradayData: z.record(z.any()),
+          contextData: z.record(z.any()).optional().default({}),
+          eodData: z.record(z.any()).optional().default({}),
+        });
+        const { intradayData, contextData, eodData } = schema.parse(args);
+        const results = rankSetups(intradayData, contextData, eodData);
+        return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
       }
 
       if (name === 'explain_routing') {
-         const results = explainRouting(router);
-         return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+        const results = explainRouting(router);
+        return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
       }
 
       throw new McpError(
@@ -343,8 +343,8 @@ export class FinancialServer {
       app.all('/mcp', async (req, res) => {
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-           res.status(401).send('Unauthorized');
-           return;
+          res.status(401).send('Unauthorized');
+          return;
         }
 
         const token = authHeader.substring(7);
@@ -352,13 +352,13 @@ export class FinancialServer {
 
         // Verify token against database
         const session = await prisma.session.findUnique({
-            where: { tokenHash },
-            include: { connection: true }
+          where: { tokenHash },
+          include: { connection: true }
         });
 
         if (!session || new Date() > session.expiresAt) {
-            res.status(401).send('Unauthorized: Invalid or expired token');
-            return;
+          res.status(401).send('Unauthorized: Invalid or expired token');
+          return;
         }
 
         // Router caching
@@ -418,13 +418,13 @@ export class FinancialServer {
           });
 
           transport.onclose = () => {
-             // Clean up defensively - although onsessionclosed should handle it
-             for (const [id, t] of this.sessions.entries()) {
-               if (t === transport) {
-                 this.sessions.delete(id);
-                 break;
-               }
-             }
+            // Clean up defensively - although onsessionclosed should handle it
+            for (const [id, t] of this.sessions.entries()) {
+              if (t === transport) {
+                this.sessions.delete(id);
+                break;
+              }
+            }
           };
 
           await this.server!.connect(transport);
@@ -436,12 +436,12 @@ export class FinancialServer {
       });
 
       app.listen(port, () => {
-        console.error(`Financial MCP Server running on HTTP port ${port}`);
+        console.error(`Signal Synthesis MCP Server running on HTTP port ${port}`);
       });
 
       process.on('SIGINT', async () => {
         if (this.server) {
-            await this.server.close();
+          await this.server.close();
         }
         process.exit(0);
       });
@@ -450,7 +450,7 @@ export class FinancialServer {
       // Stdio mode
       const transport = new StdioServerTransport();
       await this.server!.connect(transport);
-      console.error('Financial MCP Server running on stdio');
+      console.error('Signal Synthesis MCP Server running on stdio');
 
       process.on('SIGINT', async () => {
         await this.server!.close();

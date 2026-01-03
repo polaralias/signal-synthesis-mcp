@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    # container_name: financial-mcp-server # Removed to allow scaling/multiple instances if needed, or keep for dev
+    # container_name: signal-synthesis-mcp # Removed to allow scaling/multiple instances if needed, or keep for dev
     ports:
       - "3012:3000"
     environment:

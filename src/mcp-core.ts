@@ -22,7 +22,7 @@ export class McpCore {
     this.router = router;
     this.server = new Server(
       {
-        name: 'financial-mcp-server',
+        name: 'signal-synthesis-mcp',
         version: '1.0.0',
       },
       {
@@ -253,19 +253,19 @@ export class McpCore {
       }
 
       if (name === 'explain_routing') {
-         const results = explainRouting(this.router);
-         return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+        const results = explainRouting(this.router);
+        return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
       }
 
       if (name === 'rank_setups') {
-         const schema = z.object({
-             intradayData: z.record(z.any()),
-             contextData: z.record(z.any()).optional().default({}),
-             eodData: z.record(z.any()).optional().default({}),
-         });
-         const { intradayData, contextData, eodData } = schema.parse(args);
-         const results = rankSetups(intradayData, contextData, eodData);
-         return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+        const schema = z.object({
+          intradayData: z.record(z.any()),
+          contextData: z.record(z.any()).optional().default({}),
+          eodData: z.record(z.any()).optional().default({}),
+        });
+        const { intradayData, contextData, eodData } = schema.parse(args);
+        const results = rankSetups(intradayData, contextData, eodData);
+        return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
       }
 
       throw new McpError(
