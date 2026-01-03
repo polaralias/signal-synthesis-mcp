@@ -10,52 +10,50 @@ A specialized MCP server for financial analysis and trading signal generation.
 - Multi-provider support (Alpaca, Polygon, FMP, Finnhub)
 - Secure OAuth-style Authentication
 
-## Getting Started
+### Deployment
 
-### Prerequisites
-- Node.js 18+
-- Docker & Docker Compose
-- API Keys for at least one provider (Alpaca, Polygon, etc.)
+The server is optimized for Docker-based deployment and secure exposure via Nginx Proxy Manager.
 
-### Installation
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Set up the database:
+#### 1. Docker Container Setup
+The server is designed to run in a Docker environment using the provided `docker-compose.yml`.
+
+1. **Configure Environment Variables**:
+   Update the `environment` section in `docker-compose.yml` or use an `.env` file:
+   - `MASTER_KEY`: **Required**. 64 hex characters (generate with `openssl rand -hex 32`).
+   - `REDIRECT_URI_ALLOWLIST`: **Required**. Comma-separated list of allowed redirect URIs (e.g., `http://localhost:3012/callback`).
+   - `DATABASE_URL`: `postgresql://postgres:postgres@db:5432/financial_mcp`
+   - `REDIS_URL`: `redis://cache:6379`
+
+2. **Launch**:
    ```bash
    docker compose up -d
-   npx prisma db push
    ```
+   The server will start and be reachable locally on port `3012`.
 
-### Configuration & Authentication
+#### 2. Nginx Proxy Manager (NPM) Setup
+Configure NPM to handle incoming traffic and SSL termination.
 
-The server requires secure configuration for authentication.
+**Proxy Host Settings:**
+- **Domain Names**: `mcp.yourdomain.com`
+- **Scheme**: `http`
+- **Forward Host/IP**: The IP of your Docker host or service name (if shared network).
+- **Forward Port**: `3012`
+- **Websockets Support**: **Enable** (Ensures support for long-lived streams).
 
-**Environment Variables:**
+**Advanced Nginx Configuration:**
+Add the following to the **Advanced** tab to support MCP's Streamable HTTP (SSE) transport:
+```nginx
+# Disable buffering for SSE (Server-Sent Events)
+proxy_set_header Connection "";
+proxy_http_version 1.1;
+proxy_buffering off;
+proxy_cache off;
+chunked_transfer_encoding on;
 
-- `MASTER_KEY`: **Required**. The key used to encrypt stored connection configurations. 
-  - **64 Hex Characters**: Decoded directly to 32 bytes. (Recommended for security)
-    - Generate with: `openssl rand -hex 32`
-  - **Passphrase**: Derived using SHA-256 to a 32-byte key.
-- `REDIRECT_URI_ALLOWLIST`: **Required**. Comma-separated list of allowed redirect URIs for the auth flow.
-- `CODE_TTL_SECONDS`: (Optional) Expiry time for auth codes in seconds (default: 90).
-- `TOKEN_TTL_SECONDS`: (Optional) Expiry time for access tokens in seconds (default: 3600).
-- `REDIRECT_URI_ALLOWLIST_MODE`: (Optional) Validation mode: `exact` (default) or `prefix`.
-- `DATABASE_URL`: Connection string for PostgreSQL.
-- `REDIS_URL`: Connection string for Redis.
-
-**Docker Compose Example:**
-
-The provided `docker-compose.yml` includes **unsafe example values** for development:
-- `MASTER_KEY=CHANGE_THIS_TO_A_SECURE_32_BYTE_KEY_FOR_AES_GCM_ENCRYPTION`
-- `REDIRECT_URI_ALLOWLIST=http://localhost:3012/callback,http://localhost:8080/callback`
-- `CODE_TTL_SECONDS=90`
-- `TOKEN_TTL_SECONDS=3600`
-- `REDIRECT_URI_ALLOWLIST_MODE=exact`
-
-**IMPORTANT:** You **MUST** change these values in a production environment.
+# Increase timeouts for persistent connections
+proxy_read_timeout 3600s;
+proxy_send_timeout 3600s;
+```
 
 ### Smoke Test
 
@@ -73,16 +71,6 @@ A PowerShell script is provided to verify the authentication flow and server sta
 2. Enter your API keys and configuration in the UI.
 3. Upon submission, you will be redirected to your client with an authorization code.
 4. Exchange the code for an access token via `POST /token`.
-
-### Running the Server
-
-#### HTTP Streamable Transport
-The server runs on HTTP by default.
-```bash
-npm start
-```
-- Endpoint: `http://localhost:3012/mcp`
-- Authentication: `Authorization: Bearer <access_token>`
 
 ## Tools
 - `get_quotes`: Fetch real-time quotes
