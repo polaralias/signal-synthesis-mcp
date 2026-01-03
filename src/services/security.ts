@@ -1,29 +1,16 @@
 import crypto from 'crypto';
 import { argon2id, argon2Verify } from 'hash-wasm'; // Using argon2 from hash-wasm as per package.json
+import { getMasterKeyBytes } from '../security/masterKey';
 
 // Constants
 const ALGORITHM = 'aes-256-gcm';
-const MASTER_KEY = process.env.MASTER_KEY || ''; // Must be 32 bytes for AES-256
-
-if (!MASTER_KEY && process.env.NODE_ENV === 'production') {
-  console.warn('WARNING: MASTER_KEY is not set. Encryption will fail.');
-}
-
-// Ensure MASTER_KEY is correct length or hash it to be correct length
-function getMasterKeyBuffer(): Buffer {
-  if (!MASTER_KEY) {
-     throw new Error('MASTER_KEY is required');
-  }
-  // Use SHA-256 to ensure 32 bytes key from any string
-  return crypto.createHash('sha256').update(MASTER_KEY).digest();
-}
 
 /**
  * Encrypts a string using AES-256-GCM
  */
 export function encrypt(text: string): string {
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv(ALGORITHM, getMasterKeyBuffer(), iv);
+  const cipher = crypto.createCipheriv(ALGORITHM, getMasterKeyBytes(), iv);
 
   let encrypted = cipher.update(text, 'utf8', 'hex');
   encrypted += cipher.final('hex');
@@ -47,13 +34,37 @@ export function decrypt(text: string): string {
   const authTag = Buffer.from(parts[1], 'hex');
   const encrypted = parts[2];
 
-  const decipher = crypto.createDecipheriv(ALGORITHM, getMasterKeyBuffer(), iv);
-  decipher.setAuthTag(authTag);
+  try {
+    const decipher = crypto.createDecipheriv(ALGORITHM, getMasterKeyBytes(), iv);
+    decipher.setAuthTag(authTag);
 
-  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
 
-  return decrypted;
+    return decrypted;
+  } catch (err) {
+    // Legacy Fallback: If repo previously hashed the hex string
+    const rawKey = (process.env.MASTER_KEY || '').trim();
+    const isHex = /^[0-9a-fA-F]{64}$/.test(rawKey);
+
+    if (isHex) {
+      try {
+        // The old way in this repo was SHA-256 hashing the MASTER_KEY regardless of its format
+        const legacyKey = crypto.createHash('sha256').update(rawKey).digest();
+        const legacyDecipher = crypto.createDecipheriv(ALGORITHM, legacyKey, iv);
+        legacyDecipher.setAuthTag(authTag);
+
+        let decrypted = legacyDecipher.update(encrypted, 'hex', 'utf8');
+        decrypted += legacyDecipher.final('utf8');
+
+        console.warn('SUCCESS: Decrypted using legacy key derivation. Please re-save this data to update it to the new format.');
+        return decrypted;
+      } catch (legacyErr) {
+        // If legacy also fails, throw the original error
+      }
+    }
+    throw err;
+  }
 }
 
 /**

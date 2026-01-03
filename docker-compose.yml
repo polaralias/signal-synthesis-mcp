@@ -13,7 +13,10 @@ services:
       - REDIS_URL=redis://cache:6379
       - NODE_ENV=production
       # --- Example Auth Config (CHANGE THESE IN PRODUCTION) ---
-      - MASTER_KEY=CHANGE_THIS_TO_A_SECURE_32_BYTE_KEY_FOR_AES_GCM_ENCRYPTION
+      - MASTER_KEY=replace_this_with_a_64_hex_character_key_or_strong_passphrase
+      # Note: For best security, use a 64-character hex string.
+      # Generate one with: openssl rand -hex 32
+      # If a passphrase is used, it will be derived into a 32-byte key using SHA-256.
       - REDIRECT_URI_ALLOWLIST=http://localhost:3012/callback,http://localhost:8080/callback
       - CODE_TTL_SECONDS=90
       - TOKEN_TTL_SECONDS=3600

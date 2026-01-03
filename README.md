@@ -35,7 +35,10 @@ The server requires secure configuration for authentication.
 
 **Environment Variables:**
 
-- `MASTER_KEY`: **Required**. A string used to derive the encryption key for storing configuration at rest. Must be kept secret.
+- `MASTER_KEY`: **Required**. The key used to encrypt stored connection configurations. 
+  - **64 Hex Characters**: Decoded directly to 32 bytes. (Recommended for security)
+    - Generate with: `openssl rand -hex 32`
+  - **Passphrase**: Derived using SHA-256 to a 32-byte key.
 - `REDIRECT_URI_ALLOWLIST`: **Required**. Comma-separated list of allowed redirect URIs for the auth flow.
 - `CODE_TTL_SECONDS`: (Optional) Expiry time for auth codes in seconds (default: 90).
 - `TOKEN_TTL_SECONDS`: (Optional) Expiry time for access tokens in seconds (default: 3600).
