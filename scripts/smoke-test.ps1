@@ -2,7 +2,7 @@
 # Smoke Test Script for Financial MCP Server
 #
 # Steps:
-# 1. Open browser to $BaseUrl/connect (e.g., http://localhost:3000/connect)
+# 1. Open browser to $BaseUrl/connect (e.g., http://localhost:3012/connect)
 # 2. Complete the OAuth flow (requires PKCE setup if doing manually, or use a client)
 #    Wait, for manual testing, you need to capture the 'code' from the redirect.
 #    And you need the 'code_verifier' you generated.
@@ -10,7 +10,7 @@
 # Usage:
 #   ./smoke-test.ps1
 
-$BaseUrl = Read-Host "Enter BaseUrl (e.g. http://localhost:3000)"
+$BaseUrl = Read-Host "Enter BaseUrl (e.g. http://localhost:3012)"
 $Code = Read-Host "Enter Auth Code (from redirect)"
 $CodeVerifier = Read-Host "Enter Code Verifier (used to generate challenge)"
 $RedirectUri = Read-Host "Enter Redirect URI (used in /connect)"

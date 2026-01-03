@@ -7,14 +7,14 @@ services:
       dockerfile: Dockerfile
     # container_name: financial-mcp-server # Removed to allow scaling/multiple instances if needed, or keep for dev
     ports:
-      - "3000:3000"
+      - "3012:3000"
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/financial_mcp
       - REDIS_URL=redis://cache:6379
       - NODE_ENV=production
       # --- Example Auth Config (CHANGE THESE IN PRODUCTION) ---
       - MASTER_KEY=CHANGE_THIS_TO_A_SECURE_32_BYTE_KEY_FOR_AES_GCM_ENCRYPTION
-      - REDIRECT_URI_ALLOWLIST=http://localhost:3000/callback,http://localhost:8080/callback
+      - REDIRECT_URI_ALLOWLIST=http://localhost:3012/callback,http://localhost:8080/callback
       - CODE_TTL_SECONDS=90
       - TOKEN_TTL_SECONDS=3600
       - REDIRECT_URI_ALLOWLIST_MODE=exact
