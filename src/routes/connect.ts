@@ -22,7 +22,7 @@ function isRedirectUriAllowed(uri: string): boolean {
         return false;
     }
 
-    if (REDIRECT_URI_ALLOWLIST.length === 0) return true;
+    if (REDIRECT_URI_ALLOWLIST.length === 0) return false;
 
     for (const allowed of REDIRECT_URI_ALLOWLIST) {
         if (REDIRECT_URI_ALLOWLIST_MODE === 'prefix') {

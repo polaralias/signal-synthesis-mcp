@@ -1,55 +1,62 @@
-$BaseUrl = Read-Host "BaseUrl (default: http://localhost:3000)"
-if (-not $BaseUrl) { $BaseUrl = "http://localhost:3000" }
-$BaseUrl = $BaseUrl.TrimEnd('/')
 
-$Code = Read-Host "Code"
-$CodeVerifier = Read-Host "CodeVerifier"
-$RedirectUri = Read-Host "RedirectUri (default: http://localhost:3000/callback)"
-if (-not $RedirectUri) { $RedirectUri = "http://localhost:3000/callback" }
+# Smoke Test Script for Financial MCP Server
+#
+# Steps:
+# 1. Open browser to $BaseUrl/connect (e.g., http://localhost:3000/connect)
+# 2. Complete the OAuth flow (requires PKCE setup if doing manually, or use a client)
+#    Wait, for manual testing, you need to capture the 'code' from the redirect.
+#    And you need the 'code_verifier' you generated.
+#
+# Usage:
+#   ./smoke-test.ps1
 
-Write-Host "Step 1: Exchange Code for Token..."
+$BaseUrl = Read-Host "Enter BaseUrl (e.g. http://localhost:3000)"
+$Code = Read-Host "Enter Auth Code (from redirect)"
+$CodeVerifier = Read-Host "Enter Code Verifier (used to generate challenge)"
+$RedirectUri = Read-Host "Enter Redirect URI (used in /connect)"
+
+# 1. Exchange Code for Token
+$TokenUrl = "$BaseUrl/token"
+$Body = @{
+    grant_type = "authorization_code"
+    code = $Code
+    code_verifier = $CodeVerifier
+    redirect_uri = $RedirectUri
+} | ConvertTo-Json
+
+Write-Host "Exchanging code for token at $TokenUrl..."
 try {
-    $tokenBody = @{
-        grant_type = "authorization_code"
-        code = $Code
-        code_verifier = $CodeVerifier
-        redirect_uri = $RedirectUri
-    }
-    # Invoke-RestMethod uses Content-Type application/x-www-form-urlencoded by default for hashtable body
-    $tokenResponse = Invoke-RestMethod -Method Post -Uri "$BaseUrl/token" -Body $tokenBody
-    $accessToken = $tokenResponse.access_token
-
-    if (-not $accessToken) {
-        throw "No access token in response: $($tokenResponse | ConvertTo-Json)"
-    }
-    Write-Host "Success! Access Token: $accessToken"
+    $TokenResponse = Invoke-RestMethod -Uri $TokenUrl -Method Post -Body $Body -ContentType "application/json"
+    $AccessToken = $TokenResponse.access_token
+    Write-Host "Success! Access Token received." -ForegroundColor Green
 } catch {
-    Write-Error "Failed to get token: $_"
+    Write-Error "Failed to exchange token. Error: $_"
     exit 1
 }
 
-Write-Host "`nStep 2: Call MCP tools/list..."
+# 2. Call MCP Tools List
+$McpUrl = "$BaseUrl/mcp"
+$McpBody = @{
+    jsonrpc = "2.0"
+    id = 1
+    method = "tools/list"
+} | ConvertTo-Json
+
+Write-Host "Calling MCP tools/list at $McpUrl..."
 try {
-    $mcpBody = @{
-        jsonrpc = "2.0"
-        method = "tools/list"
-        params = @{}
-        id = 1
-    } | ConvertTo-Json
+    $McpResponse = Invoke-RestMethod -Uri $McpUrl -Method Post -Body $McpBody -ContentType "application/json" -Headers @{ "Authorization" = "Bearer $AccessToken" }
 
-    $mcpResponse = Invoke-RestMethod -Method Post -Uri "$BaseUrl/mcp" -Headers @{
-        Authorization = "Bearer $accessToken"
-    } -Body $mcpBody -ContentType "application/json"
-
-    if ($mcpResponse.error) {
-        throw "MCP Error: $($mcpResponse.error | ConvertTo-Json)"
+    if ($McpResponse.result) {
+        Write-Host "Success! MCP Tools list received." -ForegroundColor Green
+        $Tools = $McpResponse.result.tools
+        Write-Host "Tools found: $($Tools.Count)"
+        $Tools | ForEach-Object { Write-Host " - $($_.name): $($_.description)" }
+    } else {
+        Write-Error "MCP Response did not contain result: $($McpResponse | ConvertTo-Json)"
     }
-
-    Write-Host "Success! Tools found:"
-    $mcpResponse.result.tools | ForEach-Object { Write-Host "- $($_.name): $($_.description)" }
 } catch {
-    Write-Error "Failed to call MCP: $_"
+    Write-Error "Failed to call MCP. Error: $_"
     exit 1
 }
 
-Write-Host "`nSmoke test complete."
+Write-Host "Smoke test completed successfully." -ForegroundColor Green
