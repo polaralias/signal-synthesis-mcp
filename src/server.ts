@@ -26,6 +26,7 @@ import wellKnownRouter from './routes/well-known';
 import { ConfigType } from './config-schema';
 import { prisma } from './services/database';
 import { requestContext } from './context';
+import { validateApiKey } from './utils/auth';
 
 export class SignalSynthesisServer {
   private server: Server | null = null;
@@ -342,52 +343,70 @@ export class SignalSynthesisServer {
 
       app.all('/mcp', async (req, res) => {
         const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-          res.status(401).send('Unauthorized');
-          return;
-        }
+        const apiKeyHeader = req.headers['x-api-key'] as string;
+        const apiKeyQuery = req.query.apiKey as string;
+        const apiKey = apiKeyHeader || apiKeyQuery;
 
-        const token = authHeader.substring(7);
-        const tokenHash = await hashToken(token);
+        let requestRouter: Router | null = null;
 
-        // Verify token against database
-        const session = await prisma.session.findUnique({
-          where: { tokenHash },
-          include: { connection: true }
-        });
+        // 1. Try OAuth Bearer token
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+          const token = authHeader.substring(7);
+          const tokenHash = await hashToken(token);
 
-        if (!session || new Date() > session.expiresAt) {
-          res.status(401).send('Unauthorized: Invalid or expired token');
-          return;
-        }
+          // Verify token against database
+          const session = await prisma.session.findUnique({
+            where: { tokenHash },
+            include: { connection: true }
+          });
 
-        // Router caching
-        let requestRouter: Router;
-        const connectionId = session.connection.id;
+          if (session && new Date() <= session.expiresAt) {
+            const connectionId = session.connection.id;
 
-        if (this.routerCache.has(connectionId)) {
-          if (process.env.DEBUG_MCP) {
-            console.log(`[MCP] Reusing cached router for connection ${connectionId}`);
-          }
-          requestRouter = this.routerCache.get(connectionId)!;
-        } else {
-          if (process.env.DEBUG_MCP) {
-            console.log(`[MCP] Creating new router for connection ${connectionId}`);
-          }
-          // Decrypt configuration
-          let connectionConfig: ConfigType | null = null;
-          try {
-            const configString = decrypt(session.connection.configEncrypted);
-            connectionConfig = JSON.parse(configString);
-          } catch (e) {
-            console.error('Failed to decrypt config for connection', session.connection.id, e);
-            res.status(500).send('Internal Server Error: Failed to load configuration');
+            if (this.routerCache.has(connectionId)) {
+              if (process.env.DEBUG_MCP) {
+                console.log(`[MCP] Reusing cached router for connection ${connectionId}`);
+              }
+              requestRouter = this.routerCache.get(connectionId)!;
+            } else {
+              if (process.env.DEBUG_MCP) {
+                console.log(`[MCP] Creating new router for connection ${connectionId}`);
+              }
+              // Decrypt configuration
+              try {
+                const configString = decrypt(session.connection.configEncrypted);
+                const connectionConfig = JSON.parse(configString);
+                requestRouter = new Router(connectionConfig);
+                this.routerCache.set(connectionId, requestRouter);
+              } catch (e) {
+                console.error('Failed to decrypt config for connection', session.connection.id, e);
+                res.status(500).json({ error: 'Internal Server Error', message: 'Failed to load configuration' });
+                return;
+              }
+            }
+          } else if (session) {
+            res.status(401).json({ error: 'Unauthorized', message: 'Token expired' });
             return;
           }
+        }
 
-          // Create a new Router with the connection-specific configuration
-          requestRouter = new Router(connectionConfig!);
-          this.routerCache.set(connectionId, requestRouter);
+        // 2. Fallback to API Key if no valid OAuth router found
+        if (!requestRouter && apiKey) {
+          if (validateApiKey(apiKey)) {
+            if (process.env.DEBUG_MCP) {
+              console.log('[MCP] Authed via API Key');
+            }
+            requestRouter = this.defaultRouter;
+          } else {
+            res.status(401).json({ error: 'Unauthorized', message: 'Invalid API Key' });
+            return;
+          }
+        }
+
+        // 3. Fallback to 401
+        if (!requestRouter) {
+          res.status(401).json({ error: 'Unauthorized', message: 'Authentication required' });
+          return;
         }
 
         // Accept header normalization

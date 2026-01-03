@@ -21,6 +21,7 @@ services:
       - CODE_TTL_SECONDS=90
       - TOKEN_TTL_SECONDS=3600
       - REDIRECT_URI_ALLOWLIST_MODE=exact
+      - MCP_API_KEY=your_api_key_here
       # -------------------------------------------------------
     depends_on:
       - db

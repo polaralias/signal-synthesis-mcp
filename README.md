@@ -9,6 +9,7 @@ A specialized MCP server for financial analysis and trading signal generation.
 - Automated trade setup ranking
 - Multi-provider support (Alpaca, Polygon, FMP, Finnhub)
 - Secure OAuth-style Authentication
+- Simple API Key fallback for headless clients
 
 ### Deployment
 
@@ -23,6 +24,8 @@ The server is designed to run in a Docker environment using the provided `docker
    - `REDIRECT_URI_ALLOWLIST`: **Required**. Comma-separated list of allowed redirect URIs (e.g., `http://localhost:3012/callback`).
    - `DATABASE_URL`: `postgresql://postgres:postgres@db:5432/financial_mcp`
    - `REDIS_URL`: `redis://cache:6379`
+   - `MCP_API_KEY`: A single API key for simple auth.
+   - `MCP_API_KEYS`: (Optional) Comma-separated list of additional valid API keys.
 
 2. **Launch**:
    ```bash
@@ -71,6 +74,54 @@ A PowerShell script is provided to verify the authentication flow and server sta
 2. Enter your API keys and configuration in the UI.
 3. Upon submission, you will be redirected to your client with an authorization code.
 4. Exchange the code for an access token via `POST /token`.
+
+## Authentication Methods
+
+The MCP endpoint (`/mcp`) supports two authentication methods:
+
+1.  **OAuth Bearer Token (Preferred)**:
+    - Use the `/connect` flow to configure provider-specific keys.
+    - Header: `Authorization: Bearer <access_token>`
+    - Provides access to connection-specific configurations stored in the database.
+
+2.  **API Key (Simple Fallback)**:
+    - Set `MCP_API_KEY` or `MCP_API_KEYS` in your environment.
+    - Header: `x-api-key: <api_key>`
+    - OR Query Param: `?apiKey=<api_key>`
+    - Uses the server's default environment variables for provider keys.
+
+### Authentication Examples
+
+#### curl (OAuth Bearer)
+```bash
+curl -X POST http://localhost:3012/mcp \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+#### curl (API Key Header)
+```bash
+curl -X POST http://localhost:3012/mcp \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+#### PowerShell (API Key Query Param)
+```powershell
+$Params = @{
+    Uri = "http://localhost:3012/mcp?apiKey=YOUR_API_KEY"
+    Method = "Post"
+    ContentType = "application/json"
+    Body = @{
+        jsonrpc = "2.0"
+        id = 1
+        method = "tools/list"
+    } | ConvertTo-Json
+}
+Invoke-RestMethod @Params
+```
 
 ## Tools
 - `get_quotes`: Fetch real-time quotes

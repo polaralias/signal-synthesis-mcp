@@ -17,6 +17,8 @@ const ConfigSchema = z.object({
   DEFAULT_CONTEXT_PROVIDER: z.string().default('mock'),
   ENABLE_CACHING: z.string().transform(v => v === 'true').default('true'),
   CACHE_TTL: z.string().transform(v => parseInt(v, 10)).default('60000'),
+  MCP_API_KEY: z.string().optional(),
+  MCP_API_KEYS: z.string().optional(),
 });
 
 export const config = ConfigSchema.parse(process.env);
