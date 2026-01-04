@@ -3,24 +3,29 @@ import { z } from 'zod';
 import { hashCode, verifyPkce, generateRandomString, hashToken } from '../services/security';
 import { prisma } from '../services/database';
 import { checkRateLimit } from '../services/ratelimit';
+import { isMasterKeyPresent } from '../security/masterKey';
 
 const router = express.Router();
 
 const TOKEN_TTL_SECONDS = parseInt(process.env.TOKEN_TTL_SECONDS || '3600', 10);
 
 const TokenRequestSchema = z.object({
-  grant_type: z.literal('authorization_code'),
-  code: z.string(),
-  code_verifier: z.string(),
-  redirect_uri: z.string().url(),
+    grant_type: z.literal('authorization_code'),
+    code: z.string(),
+    code_verifier: z.string(),
+    redirect_uri: z.string().url(),
 });
 
 router.post('/token', express.json(), express.urlencoded({ extended: true }), async (req, res) => {
     try {
+        if (!isMasterKeyPresent()) {
+            res.status(403).json({ error: 'invalid_request', error_description: 'MASTER_KEY is not configured' });
+            return;
+        }
         const ip = req.ip || 'unknown';
         if (!checkRateLimit(`token:${ip}`, 10, 60)) {
-             res.status(429).json({ error: 'invalid_request', error_description: 'Too Many Requests' });
-             return;
+            res.status(429).json({ error: 'invalid_request', error_description: 'Too Many Requests' });
+            return;
         }
 
         const body = TokenRequestSchema.parse(req.body);
@@ -53,14 +58,14 @@ router.post('/token', express.json(), express.urlencoded({ extended: true }), as
 
         // Validate redirect_uri
         if (authCode.redirectUri !== body.redirect_uri) {
-             res.status(400).json({ error: 'invalid_grant', error_description: 'Redirect URI mismatch' });
-             return;
+            res.status(400).json({ error: 'invalid_grant', error_description: 'Redirect URI mismatch' });
+            return;
         }
 
         // Verify PKCE
         if (!verifyPkce(body.code_verifier, authCode.codeChallenge)) {
-             res.status(400).json({ error: 'invalid_grant', error_description: 'PKCE verification failed' });
-             return;
+            res.status(400).json({ error: 'invalid_grant', error_description: 'PKCE verification failed' });
+            return;
         }
 
         // Mark code as used
@@ -90,7 +95,7 @@ router.post('/token', express.json(), express.urlencoded({ extended: true }), as
 
     } catch (error) {
         if (error instanceof z.ZodError) {
-             res.status(400).json({ error: 'invalid_request', error_description: error.errors.map(e => e.message).join(', ') });
+            res.status(400).json({ error: 'invalid_request', error_description: error.errors.map(e => e.message).join(', ') });
         } else {
             console.error('Error in POST /token', error);
             res.status(500).json({ error: 'server_error' });

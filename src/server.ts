@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -19,7 +19,8 @@ import { enrichIntraday, enrichContext, enrichEod } from './tools/enrichment';
 import { rankSetups } from './tools/ranking';
 import { explainRouting } from './tools/debug';
 import { planAndRun } from './tools/orchestrator';
-import { hashToken, verifyToken, decrypt, generateRandomString } from './services/security';
+import { hashToken, verifyToken, decrypt, encrypt, generateRandomString, hashCode } from './services/security';
+import { isMasterKeyPresent } from './security/masterKey';
 import connectRouter from './routes/connect';
 import tokenRouter from './routes/token';
 import wellKnownRouter from './routes/well-known';
@@ -30,7 +31,6 @@ import { validateApiKey } from './utils/auth';
 import { renderLandingPage } from './templates/landing-page';
 import { renderConnectPage } from './templates/connect-ui';
 import { getBaseUrl } from './utils/url';
-import { generateRandomString } from './services/security';
 import cookieParser from 'cookie-parser';
 
 export class SignalSynthesisServer {
@@ -329,7 +329,6 @@ export class SignalSynthesisServer {
 
       // GET /
       app.get('/', (req, res) => {
-        const baseUrl = getBaseUrl(req);
         const { redirect_uri, state, code_challenge, code_challenge_method } = req.query;
 
         // If OAuth PKCE parameters are present, render the Connect UI
@@ -353,9 +352,8 @@ export class SignalSynthesisServer {
           return res.send(html);
         }
 
-        // Otherwise, render the Landing Page
-        const html = renderLandingPage(baseUrl);
-        res.send(html);
+        // Otherwise, serve the Dashboard UI
+        res.sendFile(path.join(__dirname, '../public/index.html'));
       });
 
       // Health Check
@@ -375,6 +373,119 @@ export class SignalSynthesisServer {
       app.use(connectRouter);
       app.use(tokenRouter);
       app.use(wellKnownRouter);
+
+      // --- Standardized Dashboard API ---
+
+      app.get('/api/config-status', (req: Request, res: Response) => {
+        res.json({ status: isMasterKeyPresent() ? 'present' : 'missing' });
+      });
+
+      app.get('/api/connections', async (req: Request, res: Response) => {
+        try {
+          const connections = await prisma.connection.findMany({
+            select: { id: true, displayName: true }
+          });
+          res.json(connections.map(c => ({ id: c.id, name: c.displayName })));
+        } catch (error) {
+          console.error('[API] Failed to fetch connections:', error);
+          res.status(500).json({ error: 'Failed to fetch connections' });
+        }
+      });
+
+      app.post('/api/connections', async (req: Request, res: Response) => {
+        if (!isMasterKeyPresent()) {
+          return res.status(403).json({ error: 'MASTER_KEY is not configured' });
+        }
+        try {
+          const { name, credentials } = req.body;
+          const configJson = JSON.stringify(credentials || {});
+          const configEncrypted = encrypt(configJson);
+
+          const connection = await prisma.connection.create({
+            data: {
+              displayName: name || 'New Connection',
+              configEncrypted,
+              configVersion: 1,
+            }
+          });
+          res.json({ id: connection.id, name: connection.displayName });
+        } catch (error) {
+          console.error('[API] Failed to create connection:', error);
+          res.status(500).json({ error: 'Failed to create connection' });
+        }
+      });
+
+      app.post('/api/connections/:id/sessions', async (req: Request, res: Response) => {
+        if (!isMasterKeyPresent()) {
+          return res.status(403).json({ error: 'MASTER_KEY is not configured' });
+        }
+        try {
+          const connectionId = req.params.id;
+
+          // Verify connection exists
+          const connection = await prisma.connection.findUnique({ where: { id: connectionId } });
+          if (!connection) {
+            return res.status(404).json({ error: 'Connection not found' });
+          }
+
+          const token = generateRandomString(64);
+          const tokenHash = await hashToken(token);
+          const expiresAt = new Date(Date.now() + 3600 * 1000); // 1 hour
+
+          await prisma.session.create({
+            data: {
+              connectionId,
+              tokenHash,
+              expiresAt,
+            }
+          });
+          res.json({ token });
+        } catch (error) {
+          console.error('[API] Failed to create session:', error);
+          res.status(500).json({ error: 'Failed to create session' });
+        }
+      });
+
+      // Adapter for Dashboard OAuth flow
+      app.post('/api/authorize', async (req: Request, res: Response) => {
+        if (!isMasterKeyPresent()) {
+          return res.status(403).json({ error: 'MASTER_KEY is not configured' });
+        }
+        try {
+          const { connectionId, callbackUrl, state } = req.body;
+
+          const connection = await prisma.connection.findUnique({ where: { id: connectionId } });
+          if (!connection) {
+            return res.status(404).json({ error: 'Connection not found' });
+          }
+
+          // Generate Auth Code (mirrors connect.ts logic)
+          const code = generateRandomString(32);
+          const codeHash = hashCode(code);
+          const expiresAt = new Date(Date.now() + 90 * 1000); // 90 seconds
+
+          await prisma.authCode.create({
+            data: {
+              codeHash,
+              connectionId,
+              redirectUri: callbackUrl,
+              state: state,
+              codeChallenge: '', // Standard dashboard flow might not use PKCE if it's internal?
+              codeChallengeMethod: 'S256',
+              expiresAt,
+            }
+          });
+
+          const redirectUrl = new URL(callbackUrl);
+          redirectUrl.searchParams.append('code', code);
+          if (state) redirectUrl.searchParams.append('state', state);
+
+          res.json({ redirectUrl: redirectUrl.toString() });
+        } catch (error) {
+          console.error('[API] Authorization failed:', error);
+          res.status(500).json({ error: 'Authorization failed' });
+        }
+      });
 
       // Serve static files for UI (if any other than dynamically served)
       app.use(express.static(path.join(__dirname, '../public')));

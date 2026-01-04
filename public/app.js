@@ -132,7 +132,8 @@ async function handleConnect(connectionId) {
 
             const { token } = await res.json();
 
-            document.getElementById('mcpEndpoint').textContent = `${window.location.origin}/mcp`;
+            const mcpUrl = new URL('mcp', window.location.href);
+            document.getElementById('mcpEndpoint').textContent = mcpUrl.href;
             document.getElementById('tokenDisplay').textContent = `Bearer ${token}`;
             document.getElementById('sessionModal').classList.remove('hidden');
         } catch (err) {

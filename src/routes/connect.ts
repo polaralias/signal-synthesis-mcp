@@ -6,6 +6,7 @@ import { ConfigSchema } from '../config-schema';
 import { encrypt, generateRandomString, hashCode } from '../services/security';
 import { prisma } from '../services/database';
 import { checkRateLimit } from '../services/ratelimit';
+import { isMasterKeyPresent } from '../security/masterKey';
 
 const router = express.Router();
 router.use(cookieParser());
@@ -26,9 +27,9 @@ function isRedirectUriAllowed(uri: string): boolean {
 
     for (const allowed of REDIRECT_URI_ALLOWLIST) {
         if (REDIRECT_URI_ALLOWLIST_MODE === 'prefix') {
-             if (uri.startsWith(allowed)) return true;
+            if (uri.startsWith(allowed)) return true;
         } else {
-             if (uri === allowed) return true;
+            if (uri === allowed) return true;
         }
     }
     return false;
@@ -36,53 +37,57 @@ function isRedirectUriAllowed(uri: string): boolean {
 
 // Validation for GET /connect
 const ConnectQuerySchema = z.object({
-  redirect_uri: z.string().url(),
-  state: z.string(),
-  code_challenge: z.string(),
-  code_challenge_method: z.literal('S256'),
+    redirect_uri: z.string().url(),
+    state: z.string(),
+    code_challenge: z.string(),
+    code_challenge_method: z.literal('S256'),
 });
 
 // GET /connect
 router.get('/connect', (req, res) => {
-  try {
-    const query = ConnectQuerySchema.parse(req.query);
+    try {
+        const query = ConnectQuerySchema.parse(req.query);
 
-    // Validate redirect_uri against allowlist
-    if (!isRedirectUriAllowed(query.redirect_uri)) {
-      res.status(400).send('Invalid redirect_uri');
-      return;
+        // Validate redirect_uri against allowlist
+        if (!isRedirectUriAllowed(query.redirect_uri)) {
+            res.status(400).send('Invalid redirect_uri');
+            return;
+        }
+
+        // CSRF Protection
+        const csrfToken = generateRandomString(32);
+        res.cookie('csrfToken', csrfToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 3600000 // 1 hour
+        });
+
+        const html = renderConnectPage(
+            query.redirect_uri,
+            query.state,
+            query.code_challenge,
+            query.code_challenge_method,
+            csrfToken
+        );
+        res.send(html);
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            res.status(400).send(`Invalid request: ${error.errors.map(e => e.message).join(', ')}`);
+        } else {
+            console.error(error);
+            res.status(500).send('Internal Server Error');
+        }
     }
-
-    // CSRF Protection
-    const csrfToken = generateRandomString(32);
-    res.cookie('csrfToken', csrfToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 3600000 // 1 hour
-    });
-
-    const html = renderConnectPage(
-      query.redirect_uri,
-      query.state,
-      query.code_challenge,
-      query.code_challenge_method,
-      csrfToken
-    );
-    res.send(html);
-  } catch (error) {
-      if (error instanceof z.ZodError) {
-          res.status(400).send(`Invalid request: ${error.errors.map(e => e.message).join(', ')}`);
-      } else {
-          console.error(error);
-          res.status(500).send('Internal Server Error');
-      }
-  }
 });
 
 // POST /connect
 router.post('/connect', express.urlencoded({ extended: true }), async (req, res) => {
     try {
+        if (!isMasterKeyPresent()) {
+            res.status(403).send('MASTER_KEY is not configured. Sensitive operations are blocked.');
+            return;
+        }
         // Rate limiting: 20 req/min per IP
         const ip = req.ip || 'unknown';
         if (!checkRateLimit(`connect:${ip}`, 20, 60)) {
@@ -95,14 +100,14 @@ router.post('/connect', express.urlencoded({ extended: true }), async (req, res)
         const csrfBody = req.body.csrfToken;
 
         if (!csrfCookie || !csrfBody || csrfCookie !== csrfBody) {
-             res.status(403).send('Invalid CSRF token');
-             return;
+            res.status(403).send('Invalid CSRF token');
+            return;
         }
 
         // Validate hidden fields again
         const body = ConnectQuerySchema.parse(req.body);
 
-         // Validate redirect_uri against allowlist
+        // Validate redirect_uri against allowlist
         if (!isRedirectUriAllowed(body.redirect_uri)) {
             res.status(400).send('Invalid redirect_uri');
             return;

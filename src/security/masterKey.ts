@@ -38,3 +38,10 @@ export function getMasterKeyInfo(): { format: 'hex' | 'passphrase'; length: numb
         length: rawKey.length,
     };
 }
+/**
+ * Checks if a MASTER_KEY is configured.
+ */
+export function isMasterKeyPresent(): boolean {
+    const rawKey = (process.env.MASTER_KEY || '').trim();
+    return rawKey.length > 0;
+}
