@@ -1,146 +1,276 @@
-const API_BASE = './api';
+const API_BASE = '/api';
 
-// Parse URL params
+let currentConnectionId = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+
+fetchConfigStatus();
+
+loadConnections();
+
+// Check for OAuth parameters in URL (legacy callback_url support)
 const urlParams = new URLSearchParams(window.location.search);
-const callbackUrl = urlParams.get('callback_url');
-const state = urlParams.get('state');
-
-// Auth Mode
-if (callbackUrl) {
+if (urlParams.has('callback_url')) {
     document.getElementById('authModeAlert').classList.remove('hidden');
 }
 
-async function fetchConnections() {
-    const listEl = document.getElementById('connectionList');
-    try {
-        const res = await fetch(`${API_BASE}/connections`);
-        const connections = await res.json();
+});
 
-        if (connections.length === 0) {
-            listEl.innerHTML = '<p class="text-center text-gray-500">No connections found.</p>';
-            return;
-        }
+// 1. Check if MASTER_KEY is configured on the server
 
-        const buttonText = callbackUrl ? 'Authorize & Connect' : 'Generate Token';
-        const buttonClass = callbackUrl ? 'bg-green-600 hover:bg-green-700' : 'bg-primary hover:bg-secondary';
+async function fetchConfigStatus() {
 
-        listEl.innerHTML = '';
-        connections.forEach(c => {
-            const div = document.createElement('div');
-            div.className = 'flex justify-between items-center p-4 border rounded-lg hover:bg-gray-50 transition-colors';
+const banner = document.getElementById('config-status-banner');
 
-            const infoDiv = document.createElement('div');
+const title = document.getElementById('status-title');
 
-            const nameStrong = document.createElement('strong');
-            nameStrong.className = 'text-gray-800 block';
-            nameStrong.textContent = c.name; // Safe XSS prevention
+const message = document.getElementById('status-message');
 
-            const idSpan = document.createElement('span');
-            idSpan.className = 'text-xs text-gray-500 font-mono';
-            idSpan.textContent = c.id.substring(0, 8) + '...';
+const guidance = document.getElementById('status-guidance');
 
-            infoDiv.appendChild(nameStrong);
-            infoDiv.appendChild(idSpan);
+try {
 
-            const btn = document.createElement('button');
-            btn.onclick = () => handleConnect(c.id);
-            btn.className = `${buttonClass} text-white text-sm font-semibold py-1.5 px-3 rounded shadow transition-colors`;
-            btn.textContent = buttonText;
+    const res = await fetch(`${API_BASE}/config-status`);
 
-            div.appendChild(infoDiv);
-            div.appendChild(btn);
+    const data = await res.json();
 
-            listEl.appendChild(div);
-        });
-    } catch (err) {
-        listEl.innerHTML = `<p class="text-red-500 text-center">Error loading connections: ${err.message}</p>`;
+    banner.classList.remove('hidden');
+
+    if (data.status === 'present') {
+
+        banner.className = 'mb-8 p-6 rounded-xl border-l-4 shadow-sm bg-green-50 border-green-500 text-green-900';
+
+        title.innerText = 'Server Securely Configured';
+
+        message.innerText = 'The system is ready. Your keys are encrypted with the Master Key.';
+
+        guidance.classList.add('hidden');
+
+    } else {
+
+        banner.className = 'mb-8 p-6 rounded-xl border-l-4 shadow-sm bg-red-50 border-red-500 text-red-900';
+
+        title.innerText = 'Configuration Required';
+
+        message.innerText = 'The MASTER_KEY environment variable is missing. Setup cannot proceed.';
+
+        guidance.classList.remove('hidden');
+
     }
+
+} catch (e) {
+
+    console.error('Config fetch error', e);
+
 }
 
-async function createConnection(e) {
-    e.preventDefault();
+}
 
-    const alpacaKey = document.getElementById('alpacaKey').value;
-    const alpacaSecret = document.getElementById('alpacaSecret').value;
-    const polygonKey = document.getElementById('polygonKey').value;
+// 2. Navigation
 
-    const data = {
-        name: document.getElementById('name').value,
-        serverType: 'signal-synthesis-mcp',
-        config: {},
-        credentials: {}
-    };
+function showCreate() {
 
-    if (alpacaKey) data.credentials.ALPACA_API_KEY = alpacaKey;
-    if (alpacaSecret) data.credentials.ALPACA_API_SECRET = alpacaSecret;
-    if (polygonKey) data.credentials.POLYGON_API_KEY = polygonKey;
+document.getElementById('view-dashboard').classList.add('hidden');
 
+document.getElementById('view-create').classList.remove('hidden');
+
+}
+
+function hideCreate() {
+
+document.getElementById('view-create').classList.add('hidden');
+
+document.getElementById('view-dashboard').classList.remove('hidden');
+
+}
+
+// 3. Load Connections from Backend
+
+async function loadConnections() {
+
+const container = document.getElementById('list-container');
+
+try {
+
+    const res = await fetch(`${API_BASE}/connections`);
+
+    const data = await res.json();
+
+    if (data.length === 0) {
+
+        container.innerHTML = '<div class="text-center py-12 text-gray-500 italic">No active connections found.</div>';
+
+        return;
+
+    }
+
+    container.innerHTML = data.map(conn => `
+
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center transition hover:shadow-md">
+
+            <div>
+
+                <h3 class="font-bold text-lg">${conn.name}</h3>
+
+                <span class="text-xs font-mono text-gray-400 uppercase tracking-widest">${conn.id.substring(0, 8)}</span>
+
+            </div>
+
+            <button onclick="viewConnection('${conn.id}')" class="text-indigo-600 font-bold hover:underline">Manage</button>
+
+        </div>
+
+    `).join('');
+
+} catch (e) {
+
+    container.innerHTML = '<p class="text-red-500">Failed to load connection data.</p>';
+
+}
+
+}
+
+// View Connection
+function viewConnection(id) {
+    // Check if we are in auth mode
+    const urlParams = new URLSearchParams(window.location.search);
+    const callbackUrl = urlParams.get('callback_url');
+    const state = urlParams.get('state');
+
+    if (callbackUrl) {
+        // Legacy OAuth flow for internal tools
+        authorizeLegacy(id, callbackUrl, state);
+        return;
+    }
+
+    currentConnectionId = id;
+    document.getElementById('view-dashboard').classList.add('hidden');
+    document.getElementById('view-detail').classList.remove('hidden');
+
+    // In a real app, fetch details. For now, we just show ID.
+    document.getElementById('detail-title').innerText = 'Connection: ' + id;
+    document.getElementById('session-output').classList.add('hidden');
+}
+
+async function authorizeLegacy(connectionId, callbackUrl, state) {
     try {
-        const res = await fetch(`${API_BASE}/connections`, {
+        const res = await fetch(`${API_BASE}/authorize`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+            body: JSON.stringify({ connectionId, callbackUrl, state })
         });
-
-        if (!res.ok) throw new Error(await res.text());
-
-        const connection = await res.json();
-        document.getElementById('createForm').reset();
-        await fetchConnections(); // Refresh list
-
-        // If in auth mode, automatically proceed to connect
-        if (callbackUrl) {
-            await handleConnect(connection.id);
+        const data = await res.json();
+        if (data.redirectUrl) {
+            window.location.href = data.redirectUrl;
+        } else {
+            alert('Authorization failed: ' + (data.error || 'Unknown error'));
         }
-    } catch (err) {
-        alert('Error creating connection: ' + err.message);
+    } catch (e) {
+        alert('Authorization error: ' + e.message);
     }
 }
 
-async function handleConnect(connectionId) {
-    if (callbackUrl) {
-        // OAuth-like flow
-        try {
-            const res = await fetch(`${API_BASE}/authorize`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    connectionId,
-                    callbackUrl,
-                    state
-                })
-            });
-
-            if (!res.ok) throw new Error(await res.text());
-
-            const { redirectUrl } = await res.json();
-            window.location.href = redirectUrl;
-
-        } catch (err) {
-            alert('Authorization failed: ' + err.message);
-        }
-    } else {
-        // Manual Token Generation
-        try {
-            const res = await fetch(`${API_BASE}/connections/${connectionId}/sessions`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({})
-            });
-
-            if (!res.ok) throw new Error(await res.text());
-
-            const { token } = await res.json();
-
-            const mcpUrl = new URL('mcp', window.location.href);
-            document.getElementById('mcpEndpoint').textContent = mcpUrl.href;
-            document.getElementById('tokenDisplay').textContent = `Bearer ${token}`;
-            document.getElementById('sessionModal').classList.remove('hidden');
-        } catch (err) {
-            alert('Error creating session: ' + err.message);
-        }
-    }
+function hideDetail() {
+    document.getElementById('view-detail').classList.add('hidden');
+    document.getElementById('view-dashboard').classList.remove('hidden');
+    currentConnectionId = null;
 }
 
-document.getElementById('createForm').addEventListener('submit', createConnection);
-fetchConnections();
+
+// 4. Save New Connection
+
+async function handleSave(event) {
+
+event.preventDefault();
+
+const btn = document.getElementById('save-btn');
+
+btn.disabled = true;
+
+btn.innerText = 'Securing...';
+
+const payload = {
+
+    name: document.getElementById('conn-name').value,
+
+    config: { apiKey: document.getElementById('conn-apiKey').value }
+
+};
+
+try {
+
+    const res = await fetch(`${API_BASE}/connections`, {
+
+        method: 'POST',
+
+        headers: { 'Content-Type': 'application/json' },
+
+        body: JSON.stringify(payload)
+
+    });
+
+    const data = await res.json();
+
+    if (data.error) throw new Error(data.error);
+
+    hideCreate();
+
+    loadConnections();
+
+} catch (e) {
+
+    alert("Error: " + e.message);
+
+} finally {
+
+    btn.disabled = false;
+
+    btn.innerText = 'Authorize Connection';
+
+}
+
+}
+
+// 5. Generate Session Token
+
+async function createSession() {
+
+if (!currentConnectionId) return;
+
+try {
+
+    const res = await fetch(`${API_BASE}/sessions`, {
+
+        method: 'POST',
+
+        headers: { 'Content-Type': 'application/json' },
+
+        body: JSON.stringify({ connectionId: currentConnectionId })
+
+    });
+
+    const data = await res.json();
+
+
+
+    document.getElementById('session-output').classList.remove('hidden');
+
+    document.getElementById('token-display').innerText = data.token; // Changed to data.token to match backend response from existing endpoint, or I will update backend to return accessToken
+
+} catch (e) {
+
+    alert("Failed to generate token");
+
+}
+
+}
+
+// Helper: Copy to Clipboard
+
+function copyToken() {
+
+const text = document.getElementById('token-display').innerText;
+
+navigator.clipboard.writeText(text).then(() => alert('Copied!'));
+
+}
