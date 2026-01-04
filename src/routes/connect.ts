@@ -41,14 +41,30 @@ const ConnectQuerySchema = z.object({
     state: z.string(),
     code_challenge: z.string(),
     code_challenge_method: z.literal('S256'),
+    client_id: z.string().min(1),
 });
 
 // GET /connect
-router.get('/connect', (req, res) => {
+router.get('/connect', async (req, res) => {
     try {
         const query = ConnectQuerySchema.parse(req.query);
 
-        // Validate redirect_uri against allowlist
+        // Validate client_id and redirect_uri
+        const client = await prisma.oAuthClient.findUnique({
+            where: { id: query.client_id }
+        });
+
+        if (!client) {
+            res.status(401).send('Invalid client_id');
+            return;
+        }
+
+        if (!client.redirectUris.includes(query.redirect_uri)) {
+            res.status(400).send('Invalid redirect_uri for this client');
+            return;
+        }
+
+        // Validate redirect_uri against global allowlist (optional extra guard)
         if (!isRedirectUriAllowed(query.redirect_uri)) {
             res.status(400).send('Invalid redirect_uri');
             return;
@@ -68,7 +84,8 @@ router.get('/connect', (req, res) => {
             query.state,
             query.code_challenge,
             query.code_challenge_method,
-            csrfToken
+            csrfToken,
+            query.client_id
         );
         res.send(html);
     } catch (error) {
@@ -107,6 +124,21 @@ router.post('/connect', express.urlencoded({ extended: true }), async (req, res)
         // Validate hidden fields again
         const body = ConnectQuerySchema.parse(req.body);
 
+        // Validate client_id and redirect_uri
+        const client = await prisma.oAuthClient.findUnique({
+            where: { id: body.client_id }
+        });
+
+        if (!client) {
+            res.status(401).send('Invalid client_id');
+            return;
+        }
+
+        if (!client.redirectUris.includes(body.redirect_uri)) {
+            res.status(400).send('Invalid redirect_uri for this client');
+            return;
+        }
+
         // Validate redirect_uri against allowlist
         if (!isRedirectUriAllowed(body.redirect_uri)) {
             res.status(400).send('Invalid redirect_uri');
@@ -141,6 +173,7 @@ router.post('/connect', express.urlencoded({ extended: true }), async (req, res)
             data: {
                 codeHash,
                 connectionId: connection.id,
+                clientId: body.client_id,
                 redirectUri: body.redirect_uri,
                 state: body.state,
                 codeChallenge: body.code_challenge,

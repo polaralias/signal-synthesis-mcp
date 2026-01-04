@@ -14,6 +14,7 @@ const TokenRequestSchema = z.object({
     code: z.string(),
     code_verifier: z.string(),
     redirect_uri: z.string().url(),
+    client_id: z.string().min(1),
 });
 
 router.post('/token', express.json(), express.urlencoded({ extended: true }), async (req, res) => {
@@ -59,6 +60,12 @@ router.post('/token', express.json(), express.urlencoded({ extended: true }), as
         // Validate redirect_uri
         if (authCode.redirectUri !== body.redirect_uri) {
             res.status(400).json({ error: 'invalid_grant', error_description: 'Redirect URI mismatch' });
+            return;
+        }
+
+        // Validate client_id binding
+        if (authCode.clientId !== body.client_id) {
+            res.status(400).json({ error: 'invalid_grant', error_description: 'Client ID mismatch' });
             return;
         }
 

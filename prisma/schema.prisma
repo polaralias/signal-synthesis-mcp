@@ -25,10 +25,24 @@ model Connection {
   @@map("connections")
 }
 
+model OAuthClient {
+  id                      String    @id
+  clientName              String?   @map("client_name")
+  redirectUris            String[]  @map("redirect_uris")
+  tokenEndpointAuthMethod String    @default("none") @map("token_endpoint_auth_method")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+
+  authCodes               AuthCode[]
+
+  @@map("oauth_clients")
+}
+
 model AuthCode {
   id                  String    @id @default(uuid())
   codeHash            String    @unique @map("code_hash")
   connectionId        String    @map("connection_id")
+  clientId            String    @map("client_id")
   redirectUri         String    @map("redirect_uri")
   state               String
   codeChallenge       String    @map("code_challenge")
@@ -38,6 +52,7 @@ model AuthCode {
   createdAt           DateTime  @default(now()) @map("created_at")
 
   connection          Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  client              OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@map("auth_codes")
 }

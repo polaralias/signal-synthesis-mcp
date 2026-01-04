@@ -24,6 +24,7 @@ import { isMasterKeyPresent } from './security/masterKey';
 import connectRouter from './routes/connect';
 import tokenRouter from './routes/token';
 import wellKnownRouter from './routes/well-known';
+import registerRouter from './routes/register';
 import { ConfigType } from './config-schema';
 import { prisma } from './services/database';
 import { requestContext } from './context';
@@ -328,28 +329,43 @@ export class SignalSynthesisServer {
       app.use(cookieParser());
 
       // GET /
-      app.get('/', (req, res) => {
-        const { redirect_uri, state, code_challenge, code_challenge_method } = req.query;
+      app.get('/', async (req, res) => {
+        const { redirect_uri, state, code_challenge, code_challenge_method, client_id } = req.query;
 
         // If OAuth PKCE parameters are present, render the Connect UI
-        if (redirect_uri && state && code_challenge && code_challenge_method === 'S256') {
-          // CSRF Protection (matching connect.ts logic)
-          const csrfToken = generateRandomString(32);
-          res.cookie('csrfToken', csrfToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            maxAge: 3600000 // 1 hour
-          });
+        if (redirect_uri && state && code_challenge && code_challenge_method === 'S256' && client_id) {
+          try {
+            // Validate client
+            const client = await prisma.oAuthClient.findUnique({
+              where: { id: client_id as string }
+            });
 
-          const html = renderConnectPage(
-            redirect_uri as string,
-            state as string,
-            code_challenge as string,
-            code_challenge_method as string,
-            csrfToken
-          );
-          return res.send(html);
+            if (!client || !client.redirectUris.includes(redirect_uri as string)) {
+              return res.status(400).send('Invalid client_id or redirect_uri');
+            }
+
+            // CSRF Protection (matching connect.ts logic)
+            const csrfToken = generateRandomString(32);
+            res.cookie('csrfToken', csrfToken, {
+              httpOnly: true,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+              maxAge: 3600000 // 1 hour
+            });
+
+            const html = renderConnectPage(
+              redirect_uri as string,
+              state as string,
+              code_challenge as string,
+              code_challenge_method as string,
+              csrfToken,
+              client_id as string
+            );
+            return res.send(html);
+          } catch (error: any) {
+            console.error('Error in landing page OAuth handling', error);
+            return res.status(500).send('Internal Server Error');
+          }
         }
 
         // Otherwise, serve the Dashboard UI
@@ -373,6 +389,7 @@ export class SignalSynthesisServer {
       app.use(connectRouter);
       app.use(tokenRouter);
       app.use(wellKnownRouter);
+      app.use(registerRouter);
 
       // --- Standardized Dashboard API ---
 

@@ -1,10 +1,10 @@
 import { getConfigMetadata } from '../config-schema';
 
-export function renderConnectPage(redirectUri: string, state: string, codeChallenge: string, codeChallengeMethod: string, csrfToken: string): string {
-  const metadata = getConfigMetadata();
-  const fields = metadata.fields;
+export function renderConnectPage(redirectUri: string, state: string, codeChallenge: string, codeChallengeMethod: string, csrfToken: string, clientId: string): string {
+    const metadata = getConfigMetadata();
+    const fields = metadata.fields;
 
-  const formFields = fields.map(field => `
+    const formFields = fields.map(field => `
     <div class="mb-4">
       <label class="block text-gray-700 text-sm font-bold mb-2" for="${field.key}">
         ${field.label}
@@ -21,7 +21,7 @@ export function renderConnectPage(redirectUri: string, state: string, codeChalle
     </div>
   `).join('');
 
-  return `
+    return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -48,6 +48,7 @@ export function renderConnectPage(redirectUri: string, state: string, codeChalle
             <input type="hidden" name="code_challenge" value="${codeChallenge}">
             <input type="hidden" name="code_challenge_method" value="${codeChallengeMethod}">
             <input type="hidden" name="csrfToken" value="${csrfToken}">
+            <input type="hidden" name="client_id" value="${clientId}">
 
             <!-- Configuration Fields -->
             <div class="mb-6 border-t border-gray-200 pt-4">

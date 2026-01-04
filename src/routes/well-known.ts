@@ -19,14 +19,18 @@ router.get('/.well-known/oauth-protected-resource', (req, res) => {
 
 router.get('/.well-known/oauth-authorization-server', (req, res) => {
   const baseUrl = getBaseUrl(req);
-  res.json({
+  const metadata = {
     issuer: baseUrl,
     authorization_endpoint: `${baseUrl}/connect`,
     token_endpoint: `${baseUrl}/token`,
-    response_types_supported: ["code"],
-    grant_types_supported: ["authorization_code"],
-    code_challenge_methods_supported: ["S256"]
-  });
+    registration_endpoint: `${baseUrl}/register`,
+    response_types_supported: ['code'],
+    grant_types_supported: ['authorization_code'],
+    code_challenge_methods_supported: ['S256'],
+    token_endpoint_auth_methods_supported: ['none'],
+    scopes_supported: ['mcp'],
+  };
+  res.json(metadata);
 });
 
 export default router;
