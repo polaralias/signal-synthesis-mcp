@@ -1,5 +1,1 @@
-
-> financial-mcp-server@1.0.0 start
-> node dist/index.js
-
-Financial MCP Server running on HTTP port 3000
+Signal Synthesis MCP Server running on HTTP port 3000

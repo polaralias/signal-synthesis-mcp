@@ -385,7 +385,7 @@ export class SignalSynthesisServer {
           const connections = await prisma.connection.findMany({
             select: { id: true, displayName: true }
           });
-          res.json(connections.map(c => ({ id: c.id, name: c.displayName })));
+          res.json(connections.map((c: { id: string, displayName: string | null }) => ({ id: c.id, name: c.displayName })));
         } catch (error) {
           console.error('[API] Failed to fetch connections:', error);
           res.status(500).json({ error: 'Failed to fetch connections' });
@@ -397,8 +397,9 @@ export class SignalSynthesisServer {
           return res.status(403).json({ error: 'MASTER_KEY is not configured' });
         }
         try {
-          const { name, credentials } = req.body;
-          const configJson = JSON.stringify(credentials || {});
+          // Supports both old { name, credentials } and new { name, config } payloads
+          const { name, credentials, config } = req.body;
+          const configJson = JSON.stringify(config || credentials || {});
           const configEncrypted = encrypt(configJson);
 
           const connection = await prisma.connection.create({
@@ -415,32 +416,60 @@ export class SignalSynthesisServer {
         }
       });
 
+      // Internal helper to create session
+      const createSession = async (connectionId: string) => {
+        // Verify connection exists
+        const connection = await prisma.connection.findUnique({ where: { id: connectionId } });
+        if (!connection) {
+          throw new Error('Connection not found');
+        }
+
+        const token = generateRandomString(64);
+        const tokenHash = await hashToken(token);
+        const expiresAt = new Date(Date.now() + 3600 * 1000); // 1 hour
+
+        await prisma.session.create({
+          data: {
+            connectionId,
+            tokenHash,
+            expiresAt,
+          }
+        });
+        return token;
+      };
+
       app.post('/api/connections/:id/sessions', async (req: Request, res: Response) => {
         if (!isMasterKeyPresent()) {
           return res.status(403).json({ error: 'MASTER_KEY is not configured' });
         }
         try {
           const connectionId = req.params.id;
-
-          // Verify connection exists
-          const connection = await prisma.connection.findUnique({ where: { id: connectionId } });
-          if (!connection) {
+          const token = await createSession(connectionId);
+          res.json({ token });
+        } catch (error: any) {
+          if (error.message === 'Connection not found') {
             return res.status(404).json({ error: 'Connection not found' });
           }
+          console.error('[API] Failed to create session:', error);
+          res.status(500).json({ error: 'Failed to create session' });
+        }
+      });
 
-          const token = generateRandomString(64);
-          const tokenHash = await hashToken(token);
-          const expiresAt = new Date(Date.now() + 3600 * 1000); // 1 hour
-
-          await prisma.session.create({
-            data: {
-              connectionId,
-              tokenHash,
-              expiresAt,
-            }
-          });
+      app.post('/api/sessions', async (req: Request, res: Response) => {
+        if (!isMasterKeyPresent()) {
+          return res.status(403).json({ error: 'MASTER_KEY is not configured' });
+        }
+        try {
+          const { connectionId } = req.body;
+          if (!connectionId) {
+             return res.status(400).json({ error: 'connectionId is required' });
+          }
+          const token = await createSession(connectionId);
           res.json({ token });
-        } catch (error) {
+        } catch (error: any) {
+          if (error.message === 'Connection not found') {
+            return res.status(404).json({ error: 'Connection not found' });
+          }
           console.error('[API] Failed to create session:', error);
           res.status(500).json({ error: 'Failed to create session' });
         }

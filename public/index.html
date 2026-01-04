@@ -1,127 +1,211 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Financial MCP - Connection Manager</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#0066cc',
-                        secondary: '#0055aa',
-                        background: '#f4f4f9',
-                    }
-                }
-            }
-        }
-    </script>
-</head>
-<body class="bg-slate-50 min-h-screen font-sans selection:bg-blue-100 selection:text-blue-900">
-    <nav class="bg-white border-b border-slate-200 sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16 items-center">
-                <div class="flex items-center gap-2">
-                    <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21 11-8-8-9 9"></path><path d="M7 8.5 7 22"></path><path d="M17 8.5 17 22"></path><path d="M12 3v19"></path></svg>
-                    </div>
-                    <span class="text-xl font-bold tracking-tight text-slate-900">Signal Synthesis MCP</span>
-                </div>
-                <div class="text-sm font-medium text-slate-500">
-                    Connection Manager v1.0
-                </div>
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>MCP Server Configuration</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+
+    .hidden { display: none; }
+
+    .glass-panel {
+
+        background: rgba(255, 255, 255, 0.8);
+
+        backdrop-filter: blur(10px);
+
+        border: 1px solid rgba(255, 255, 255, 0.3);
+
+    }
+
+</style>
+
+</head><body class="bg-gray-50 min-h-screen font-sans text-gray-900"><div class="max-w-4xl mx-auto p-6">
+
+    <header class="mb-10 text-center">
+
+        <h1 class="text-4xl font-extrabold tracking-tight text-indigo-900">MCP Server Dashboard</h1>
+
+        <p class="mt-2 text-lg text-gray-600">Secure configuration and connection management</p>
+
+    </header>
+
+    <!-- Authorization Mode Alert -->
+    <div id="authModeAlert" class="hidden mb-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r shadow-sm">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                </svg>
             </div>
-        </div>
-    </nav>
-
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div class="text-center mb-12">
-            <h1 class="text-4xl font-extrabold text-gray-900 tracking-tight">Signal Synthesis MCP</h1>
-        </div>
-
-        <!-- Authorization Mode Alert -->
-        <div id="authModeAlert" class="hidden mb-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r shadow-sm">
-            <div class="flex">
-                <div class="flex-shrink-0">
-                    <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                    </svg>
-                </div>
-                <div class="ml-3">
-                    <p class="text-sm text-blue-700">
-                        Select or create a connection to authorize access for the requesting application.
-                    </p>
-                </div>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <!-- Create Connection Card -->
-            <div class="bg-white p-8 rounded-xl shadow-lg border border-gray-100">
-                <h2 class="text-2xl font-bold mb-6 text-gray-800 border-b pb-2">Create Connection</h2>
-                <form id="createForm" class="space-y-5">
-                    <div>
-                        <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Connection Name</label>
-                        <input type="text" id="name" required placeholder="e.g. My Alpaca Connection" 
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-colors outline-none">
-                    </div>
-                    <div>
-                        <label for="alpacaKey" class="block text-sm font-medium text-gray-700 mb-1">Alpaca API Key</label>
-                        <input type="text" id="alpacaKey" 
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-colors outline-none font-mono text-sm">
-                    </div>
-                    <div>
-                        <label for="alpacaSecret" class="block text-sm font-medium text-gray-700 mb-1">Alpaca Secret Key</label>
-                        <input type="password" id="alpacaSecret" 
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-colors outline-none font-mono text-sm">
-                    </div>
-                    <div>
-                        <label for="polygonKey" class="block text-sm font-medium text-gray-700 mb-1">Polygon API Key</label>
-                        <input type="text" id="polygonKey" 
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-colors outline-none font-mono text-sm">
-                    </div>
-                    <button type="submit" 
-                        class="w-full bg-primary hover:bg-secondary text-white font-semibold py-2 px-4 rounded-lg shadow transition-colors duration-200">
-                        Create Connection
-                    </button>
-                </form>
-            </div>
-
-            <!-- Existing Connections Card -->
-            <div class="bg-white p-8 rounded-xl shadow-lg border border-gray-100 flex flex-col">
-                <h2 class="text-2xl font-bold mb-6 text-gray-800 border-b pb-2">Existing Connections</h2>
-                <div id="connectionList" class="flex-grow space-y-4 overflow-y-auto max-h-[500px]">
-                    <div class="flex justify-center items-center h-full text-gray-400">Loading...</div>
-                </div>
+            <div class="ml-3">
+                <p class="text-sm text-blue-700">
+                    Select a connection to authorize access for the requesting application.
+                </p>
             </div>
         </div>
     </div>
 
-    <!-- Session Modal -->
-    <div id="sessionModal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden flex items-center justify-center z-50">
-        <div class="bg-white rounded-xl shadow-2xl p-8 max-w-lg w-full mx-4 relative">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Session Created</h2>
-            <p class="text-gray-600 mb-6">Use the following details to connect your MCP client:</p>
-            
-            <div class="mb-4">
-                <p class="text-sm font-bold text-gray-700 mb-1">MCP Endpoint:</p>
-                <div class="bg-gray-100 p-3 rounded border border-gray-200 font-mono text-sm break-all" id="mcpEndpoint"></div>
+    <!-- Master Key Status Banner -->
+
+    <div id="config-status-banner" class="hidden mb-8 p-6 rounded-xl border-l-4 shadow-sm transition-all duration-300">
+
+        <div class="flex items-start">
+
+            <div id="status-icon" class="text-2xl mr-4"></div>
+
+            <div class="flex-1">
+
+                <h3 id="status-title" class="font-bold text-lg"></h3>
+
+                <p id="status-message" class="text-sm opacity-90"></p>
+
+                <div id="status-guidance" class="mt-4 p-4 bg-black/5 rounded-lg hidden">
+
+                    <p class="font-semibold text-xs uppercase tracking-wider mb-2">Setup Required:</p>
+
+                    <code class="block text-xs bg-gray-800 text-white p-3 rounded-md">export MASTER_KEY=your_secret_passphrase</code>
+
+                </div>
+
             </div>
 
-            <div class="mb-6">
-                <p class="text-sm font-bold text-gray-700 mb-1">Authorization Header:</p>
-                <div class="bg-blue-50 text-blue-800 p-4 rounded border border-blue-200 font-mono text-sm break-all" id="tokenDisplay"></div>
-            </div>
+        </div>
 
-            <button onclick="document.getElementById('sessionModal').classList.add('hidden')" 
-                class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg transition-colors">
-                Close
+    </div>
+
+    <!-- Main Dashboard View -->
+
+    <section id="view-dashboard" class="space-y-6">
+
+        <div class="flex justify-between items-center">
+
+            <h2 class="text-2xl font-bold">Connections</h2>
+
+            <button onclick="showCreate()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-lg transition-transform hover:scale-105 active:scale-95 shadow-md">
+
+                + New Connection
+
             </button>
-        </div>
-    </div>
 
-    <script src="app.js"></script>
-</body>
-</html>
+        </div>
+
+
+
+        <div id="list-container" class="grid gap-4">
+
+            <!-- Connections injected via JavaScript -->
+
+            <div class="text-center py-12 text-gray-400">Loading connections...</div>
+
+        </div>
+
+    </section>
+
+    <!-- Create Connection View -->
+
+    <section id="view-create" class="hidden glass-panel rounded-2xl p-8 shadow-xl">
+
+        <div class="flex justify-between items-center mb-8">
+
+            <h2 class="text-2xl font-bold" id="form-title">Configure Connection</h2>
+
+            <button onclick="hideCreate()" class="text-gray-400 hover:text-gray-600 transition">
+
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="6 18L18 6M6 6l12 12"></path></svg>
+
+            </button>
+
+        </div>
+
+        <form id="config-form" onsubmit="handleSave(event)" class="space-y-5">
+
+            <div>
+
+                <label class="block text-sm font-semibold mb-2">Display Name</label>
+
+                <input type="text" id="conn-name" required class="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition" placeholder="e.g. My Workspace">
+
+            </div>
+
+            <div>
+
+                <label class="block text-sm font-semibold mb-2">Service API Key</label>
+
+                <input type="password" id="conn-apiKey" required class="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition" placeholder="Paste your API key here">
+
+            </div>
+
+            <div class="pt-6 border-t flex justify-end">
+
+                <button type="submit" id="save-btn" class="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-10 rounded-xl transition shadow-lg">
+
+                    Authorize Connection
+
+                </button>
+
+            </div>
+
+        </form>
+
+    </section>
+
+    <!-- Connection Detail View -->
+
+    <section id="view-detail" class="hidden space-y-8">
+
+        <button onclick="hideDetail()" class="flex items-center text-indigo-600 font-semibold hover:text-indigo-800 transition">
+
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+
+            Back to List
+
+        </button>
+
+        <div class="glass-panel p-8 rounded-2xl shadow-lg border-l-8 border-indigo-500">
+
+            <h3 class="text-2xl font-bold mb-4" id="detail-title">Connection Details</h3>
+
+            <div id="detail-content" class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm"></div>
+
+        </div>
+
+        <div class="bg-white p-8 rounded-2xl shadow-md border">
+
+            <h3 class="text-xl font-bold mb-4">Client Access</h3>
+
+            <p class="text-gray-600 mb-6 text-sm">Generate a session token for use with external agents or tools.</p>
+
+            
+
+            <button onclick="createSession()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition">
+
+                Generate New Session Token
+
+            </button>
+
+            <div id="session-output" class="hidden mt-6 p-6 bg-amber-50 rounded-xl border border-amber-200">
+
+                <p class="text-sm font-bold text-amber-900 mb-2">Secret Session Token (Save this!):</p>
+
+                <div class="relative">
+
+                    <pre id="token-display" class="bg-white p-4 rounded-lg border font-mono text-sm overflow-x-auto"></pre>
+
+                    <button onclick="copyToken()" class="absolute top-2 right-2 p-2 bg-gray-100 rounded-md hover:bg-gray-200 text-xs font-bold">Copy</button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+</div>
+
+<script src="app.js"></script>
+
+</body></html>
