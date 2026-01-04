@@ -11,6 +11,15 @@ A specialized MCP server for financial analysis and trading signal generation.
 - Secure OAuth-style Authentication
 - Simple API Key fallback for headless clients
 
+### Landing Page
+
+The server now features a user-friendly landing page at the root URL (`/`). This page provides:
+- **Configuration Status**: Real-time feedback on whether the server is correctly configured with API keys.
+- **Quick Links**: Easy access to health checks, MCP configuration, and OAuth discovery endpoints.
+- **Connect UI**: A dedicated interface for manual OAuth PKCE configuration.
+
+![Landing Page UI](https://via.placeholder.com/800x400?text=Signal+Synthesis+MCP+Landing+Page)
+
 ### Deployment
 
 The server is optimized for Docker-based deployment and secure exposure via Nginx Proxy Manager.

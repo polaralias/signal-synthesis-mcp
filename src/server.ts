@@ -27,6 +27,11 @@ import { ConfigType } from './config-schema';
 import { prisma } from './services/database';
 import { requestContext } from './context';
 import { validateApiKey } from './utils/auth';
+import { renderLandingPage } from './templates/landing-page';
+import { renderConnectPage } from './templates/connect-ui';
+import { getBaseUrl } from './utils/url';
+import { generateRandomString } from './services/security';
+import cookieParser from 'cookie-parser';
 
 export class SignalSynthesisServer {
   private server: Server | null = null;
@@ -319,6 +324,39 @@ export class SignalSynthesisServer {
 
       // Trust proxy for correct protocol/IP handling behind reverse proxies
       app.set('trust proxy', 1);
+
+      app.use(cookieParser());
+
+      // GET /
+      app.get('/', (req, res) => {
+        const baseUrl = getBaseUrl(req);
+        const { redirect_uri, state, code_challenge, code_challenge_method } = req.query;
+
+        // If OAuth PKCE parameters are present, render the Connect UI
+        if (redirect_uri && state && code_challenge && code_challenge_method === 'S256') {
+          // CSRF Protection (matching connect.ts logic)
+          const csrfToken = generateRandomString(32);
+          res.cookie('csrfToken', csrfToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 3600000 // 1 hour
+          });
+
+          const html = renderConnectPage(
+            redirect_uri as string,
+            state as string,
+            code_challenge as string,
+            code_challenge_method as string,
+            csrfToken
+          );
+          return res.send(html);
+        }
+
+        // Otherwise, render the Landing Page
+        const html = renderLandingPage(baseUrl);
+        res.send(html);
+      });
 
       // Health Check
       app.get('/health', (req, res) => {
