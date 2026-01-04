@@ -10,7 +10,6 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import { config } from './config';
 import { Router } from './routing/index';
 import { z } from 'zod';
 import { discoverCandidates } from './tools/discovery';
@@ -19,19 +18,19 @@ import { enrichIntraday, enrichContext, enrichEod } from './tools/enrichment';
 import { rankSetups } from './tools/ranking';
 import { explainRouting } from './tools/debug';
 import { planAndRun } from './tools/orchestrator';
-import { hashToken, verifyToken, decrypt, encrypt, generateRandomString, hashCode } from './services/security';
+import { hashToken, verifyToken, generateRandomString, hashCode } from './services/security';
 import { isMasterKeyPresent } from './security/masterKey';
 import connectRouter from './routes/connect';
 import tokenRouter from './routes/token';
 import wellKnownRouter from './routes/well-known';
 import registerRouter from './routes/register';
-import { ConfigType } from './config-schema';
+import apiKeysRouter from './routes/api-keys';
+import { ApiKeyService } from './services/api-key';
+import { decrypt } from './security/crypto';
 import { prisma } from './services/database';
 import { requestContext } from './context';
 import { validateApiKey } from './utils/auth';
-import { renderLandingPage } from './templates/landing-page';
 import { renderConnectPage } from './templates/connect-ui';
-import { getBaseUrl } from './utils/url';
 import cookieParser from 'cookie-parser';
 
 export class SignalSynthesisServer {
@@ -390,11 +389,15 @@ export class SignalSynthesisServer {
       app.use(tokenRouter);
       app.use(wellKnownRouter);
       app.use(registerRouter);
+      app.use(apiKeysRouter);
 
       // --- Standardized Dashboard API ---
 
       app.get('/api/config-status', (req: Request, res: Response) => {
-        res.json({ status: isMasterKeyPresent() ? 'present' : 'missing' });
+        res.json({
+          status: isMasterKeyPresent() ? 'present' : 'missing',
+          mode: process.env.API_KEY_MODE || 'disabled'
+        });
       });
 
       app.get('/api/connections', async (req: Request, res: Response) => {
@@ -540,6 +543,9 @@ export class SignalSynthesisServer {
               }
               // Decrypt configuration
               try {
+                // Determine if we are using new crypto or old
+                // For connection config, we assume it's using the same master key logic
+                // The import `decrypt` is from `./security/crypto` now.
                 const configString = decrypt(session.connection.configEncrypted);
                 const connectionConfig = JSON.parse(configString);
                 requestRouter = new Router(connectionConfig);
@@ -558,12 +564,41 @@ export class SignalSynthesisServer {
 
         // 2. Fallback to API Key if no valid OAuth router found
         if (!requestRouter && apiKey) {
-          if (validateApiKey(apiKey)) {
+          // Check if it's a user-bound API key
+          if (process.env.API_KEY_MODE === 'user_bound') {
+            const apiKeyService = new ApiKeyService();
+            const validKey = await apiKeyService.validateApiKey(apiKey);
+            if (validKey && validKey.userConfig) {
+              try {
+                const configJson = decrypt(validKey.userConfig.configEncrypted);
+                const userConfig = JSON.parse(configJson);
+
+                const routerKey = `user_bound:${validKey.id}`;
+                if (this.routerCache.has(routerKey)) {
+                  requestRouter = this.routerCache.get(routerKey)!;
+                } else {
+                  requestRouter = new Router(userConfig);
+                  this.routerCache.set(routerKey, requestRouter);
+                }
+
+                // Async Usage recording
+                apiKeyService.recordUsage(validKey.id, req.ip);
+
+              } catch (e) {
+                console.error("Failed to load user bound config", e);
+                // Don't leak error details
+                // Proceed to check legacy keys or fail
+              }
+            }
+          }
+
+          // If we still don't have a router, check for legacy API Key
+          if (!requestRouter && validateApiKey(apiKey)) {
             if (process.env.DEBUG_MCP) {
-              console.log('[MCP] Authed via API Key');
+              console.log('[MCP] Authed via Legacy API Key');
             }
             requestRouter = this.defaultRouter;
-          } else {
+          } else if (!requestRouter) {
             res.status(401).json({ error: 'Unauthorized', message: 'Invalid API Key' });
             return;
           }
@@ -599,11 +634,10 @@ export class SignalSynthesisServer {
             },
             onsessionclosed: (id) => {
               this.sessions.delete(id);
-            }
+            },
           });
 
           transport.onclose = () => {
-            // Clean up defensively - although onsessionclosed should handle it
             for (const [id, t] of this.sessions.entries()) {
               if (t === transport) {
                 this.sessions.delete(id);

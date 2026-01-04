@@ -9,6 +9,7 @@ A specialized MCP server for financial analysis and trading signal generation.
 - Automated trade setup ranking
 - Multi-provider support (Alpaca, Polygon, FMP, Finnhub)
 - Secure OAuth-style Authentication
+- Self-Service User-Bound API Key Provisioning (Non-OAuth Clients)
 - Simple API Key fallback for headless clients
 
 ### Landing Page
@@ -93,7 +94,15 @@ The MCP endpoint (`/mcp`) supports two authentication methods:
     - Header: `Authorization: Bearer <access_token>`
     - Provides access to connection-specific configurations stored in the database.
 
-2.  **API Key (Simple Fallback)**:
+    - Header: `Authorization: Bearer <access_token>`
+    - Provides access to connection-specific configurations stored in the database.
+
+2.  **User-Bound API Key (Self-Serve)**:
+    - Visit the root URL `http://localhost:3012/` and generate a key by providing your config (e.g. Alpaca Keys).
+    - Header: `Authorization: Bearer <api_key>` or `X-API-Key: <api_key>`
+    - Maps 1:1 to the configuration you provided during generation.
+
+3.  **Legacy Global API Key (Simple Fallback)**:
     - Set `MCP_API_KEY` or `MCP_API_KEYS` in your environment.
     - Header: `x-api-key: <api_key>`
     - OR Query Param: `?apiKey=<api_key>`

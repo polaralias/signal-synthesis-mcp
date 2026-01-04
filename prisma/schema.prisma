@@ -103,3 +103,36 @@ model TradeSetup {
   @@index([createdAt])
   @@map("trade_setups")
 }
+
+model UserConfig {
+  id                String    @id @default(uuid())
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  serverId          String    @map("server_id")
+  configEncrypted   String    @map("config_enc")
+  configKeyId       String?   @map("config_kid")
+  configFingerprint String?   @map("config_fingerprint")
+  displayName       String?   @map("display_name")
+  revokedAt         DateTime? @map("revoked_at")
+
+  apiKeys           ApiKey[]
+
+  @@map("user_configs")
+}
+
+model ApiKey {
+  id           String      @id @default(uuid())
+  userConfigId String      @map("user_config_id")
+  name         String?
+  keyHash      String      @unique @map("key_hash")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  lastUsedAt   DateTime?   @map("last_used_at")
+  revokedAt    DateTime?   @map("revoked_at")
+  createdIp    String?     @map("created_ip")
+  lastUsedIp   String?     @map("last_used_ip")
+
+  userConfig   UserConfig  @relation(fields: [userConfigId], references: [id], onDelete: Cascade)
+
+  @@index([keyHash])
+  @@map("api_keys")
+}
