@@ -7,33 +7,13 @@ import { encrypt, generateRandomString, hashCode } from '../services/security';
 import { prisma } from '../services/database';
 import { checkRateLimit } from '../services/ratelimit';
 import { isMasterKeyPresent } from '../security/masterKey';
+import { isRedirectUriAllowed, logOAuthRejection } from '../utils/oauth-utils';
 
 const router = express.Router();
 router.use(cookieParser());
 
 const CODE_TTL_SECONDS = parseInt(process.env.CODE_TTL_SECONDS || '90', 10);
-const REDIRECT_URI_ALLOWLIST = (process.env.REDIRECT_URI_ALLOWLIST || '').split(',').map(s => s.trim()).filter(Boolean);
-const REDIRECT_URI_ALLOWLIST_MODE = process.env.REDIRECT_URI_ALLOWLIST_MODE || 'exact';
 
-function isRedirectUriAllowed(uri: string): boolean {
-    try {
-        const url = new URL(uri);
-        if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
-    } catch {
-        return false;
-    }
-
-    if (REDIRECT_URI_ALLOWLIST.length === 0) return false;
-
-    for (const allowed of REDIRECT_URI_ALLOWLIST) {
-        if (REDIRECT_URI_ALLOWLIST_MODE === 'prefix') {
-            if (uri.startsWith(allowed)) return true;
-        } else {
-            if (uri === allowed) return true;
-        }
-    }
-    return false;
-}
 
 // Validation for GET /connect
 const ConnectQuerySchema = z.object({
@@ -60,13 +40,25 @@ router.get('/connect', async (req, res) => {
         }
 
         if (!client.redirectUris.includes(query.redirect_uri)) {
-            res.status(400).send('Invalid redirect_uri for this client');
+            logOAuthRejection({
+                redirect_uri: query.redirect_uri,
+                client_id: query.client_id,
+                path: '/connect',
+                ip: req.ip || 'unknown'
+            });
+            res.status(400).send("This client isn't in the redirect allow list - raise an issue on GitHub for it to be added");
             return;
         }
 
         // Validate redirect_uri against global allowlist (optional extra guard)
         if (!isRedirectUriAllowed(query.redirect_uri)) {
-            res.status(400).send('Invalid redirect_uri');
+            logOAuthRejection({
+                redirect_uri: query.redirect_uri,
+                client_id: query.client_id,
+                path: '/connect',
+                ip: req.ip || 'unknown'
+            });
+            res.status(400).send("This client isn't in the redirect allow list - raise an issue on GitHub for it to be added");
             return;
         }
 
@@ -135,13 +127,25 @@ router.post('/connect', express.urlencoded({ extended: true }), async (req, res)
         }
 
         if (!client.redirectUris.includes(body.redirect_uri)) {
-            res.status(400).send('Invalid redirect_uri for this client');
+            logOAuthRejection({
+                redirect_uri: body.redirect_uri,
+                client_id: body.client_id,
+                path: '/connect',
+                ip: req.ip || 'unknown'
+            });
+            res.status(400).send("This client isn't in the redirect allow list - raise an issue on GitHub for it to be added");
             return;
         }
 
         // Validate redirect_uri against allowlist
         if (!isRedirectUriAllowed(body.redirect_uri)) {
-            res.status(400).send('Invalid redirect_uri');
+            logOAuthRejection({
+                redirect_uri: body.redirect_uri,
+                client_id: body.client_id,
+                path: '/connect',
+                ip: req.ip || 'unknown'
+            });
+            res.status(400).send("This client isn't in the redirect allow list - raise an issue on GitHub for it to be added");
             return;
         }
 

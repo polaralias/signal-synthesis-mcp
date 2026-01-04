@@ -17,10 +17,11 @@ services:
       # Note: For best security, use a 64-character hex string.
       # Generate one with: openssl rand -hex 32
       # If a passphrase is used, it will be derived into a 32-byte key using SHA-256.
-      - REDIRECT_URI_ALLOWLIST=http://localhost:3012/callback,http://localhost:8080/callback
+      # If a passphrase is used, it will be derived into a 32-byte key using SHA-256.
+      - REDIRECT_URI_ALLOWLIST=https://chatgpt.com/,https://chat.openai.com/,http://localhost:3000/,http://localhost:8080/
       - CODE_TTL_SECONDS=90
       - TOKEN_TTL_SECONDS=3600
-      - REDIRECT_URI_ALLOWLIST_MODE=exact
+      - REDIRECT_URI_ALLOWLIST_MODE=prefix
       - MCP_API_KEY=your_api_key_here
       # -------------------------------------------------------
     depends_on:

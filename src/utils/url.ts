@@ -7,7 +7,12 @@ import { Request } from 'express';
  */
 export function getBaseUrl(req: Request): string {
     if (process.env.BASE_URL) {
-        return process.env.BASE_URL.replace(/\/$/, '');
+        let url = process.env.BASE_URL.trim();
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            console.warn(`[Config] BASE_URL '${url}' missing scheme, defaulting to https://`);
+            url = `https://${url}`;
+        }
+        return url.replace(/\/$/, '');
     }
     const protocol = req.protocol;
     const host = req.get('host');

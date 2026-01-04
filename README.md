@@ -150,3 +150,28 @@ To test:
 ```bash
 npm test
 ```
+
+## OAuth / Redirect URI Allowlist
+
+This server supports RFC 7591 Dynamic Client Registration and OAuth 2.0 Authorization Code flow.
+To secure the authentication flow, a Strict Redirect URI Allowlist is enforced.
+
+### Configuration
+
+-   **`BASE_URL`**: (Optional) The public base URL of the server (e.g., `https://mcp.example.com`). If not set, it is derived from the request. **Must start with `https://` in production.**
+-   **`REDIRECT_URI_ALLOWLIST`**: Comma-separated list of allowed redirect URIs or prefixes.
+    -   Default: `https://chatgpt.com/,https://chat.openai.com/,http://localhost:3000/,http://localhost:8080/`
+-   **`REDIRECT_URI_ALLOWLIST_MODE`**: Defines how the allowlist is matched.
+    -   `prefix` (Default): The provided `redirect_uri` must start with one of the allowed entries.
+    -   `exact`: The provided `redirect_uri` must match an allowed entry exactly.
+
+### Adding a New Client
+To allow a new client (e.g., a local dev tool or a new platform), add its callback URL (or a prefix) to the `REDIRECT_URI_ALLOWLIST` environment variable in `docker-compose.yml` or your deployment config.
+
+### Troubleshooting
+-   **Rejection Logs**: Server-side logs will show a standardized JSON warning when a redirect URI is rejected:
+    ```json
+    {"event":"oauth_rejection","rejected_redirect_uri":"...","..."}
+    ```
+-   **Cloudflare**: If putting this server behind Cloudflare, ensure "Bot Fight Mode" does not block the OAuth POST endpoints.
+

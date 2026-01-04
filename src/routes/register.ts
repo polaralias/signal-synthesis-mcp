@@ -2,6 +2,7 @@ import express from "express";
 import { z } from "zod";
 import { prisma } from "../services/database";
 import { generateRandomString } from "../services/security";
+import { isRedirectUriAllowed, logOAuthRejection } from "../utils/oauth-utils";
 
 const router = express.Router();
 
@@ -17,19 +18,19 @@ router.post("/register", express.json(), async (req, res) => {
     try {
         const body = RegisterRequestSchema.parse(req.body);
 
-        // Validate redirect URIs (deny non-http/https)
+        // Validate redirect URIs (enforce allowlist)
         for (const uri of body.redirect_uris) {
-            try {
-                const url = new URL(uri);
-                if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-                    res.status(400).json({
-                        error: "invalid_client_metadata",
-                        error_description: "Redirect URIs must use http or https"
-                    });
-                    return;
-                }
-            } catch {
-                res.status(400).json({ error: "invalid_client_metadata" });
+            if (!isRedirectUriAllowed(uri)) {
+                logOAuthRejection({
+                    redirect_uri: uri,
+                    client_name: body.client_name,
+                    path: '/register',
+                    ip: req.ip || 'unknown'
+                });
+                res.status(400).json({
+                    error: "invalid_redirect_uri",
+                    error_description: "This client isn't in the redirect allow list - raise an issue on GitHub for it to be added"
+                });
                 return;
             }
         }
