@@ -390,6 +390,7 @@ export class SignalSynthesisServer {
       app.use(tokenRouter);
       app.use(wellKnownRouter);
       app.use(registerRouter);
+      console.log('Mounting API Keys Router at /api');
       app.use("/api", apiKeysRouter);
 
       // --- Standardized Dashboard API ---
