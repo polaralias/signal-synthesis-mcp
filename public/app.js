@@ -11,6 +11,18 @@ async function init() {
         const res = await fetch(`${API_BASE}/config-status`);
         const status = await res.json();
 
+        // Check for Master Key
+        if (status.status === 'missing') {
+            document.getElementById('masterKeyAlert').classList.remove('hidden');
+            disableInteractions();
+        }
+
+        // Check for Master Key
+        if (status.status === 'missing') {
+            document.getElementById('masterKeyAlert').classList.remove('hidden');
+            disableInteractions();
+        }
+
         if (status.mode === 'user_bound') {
             await initUserBoundMode();
         } else {
@@ -290,6 +302,40 @@ async function handleConnect(connectionId) {
         } catch (err) {
             alert('Error creating session: ' + err.message);
         }
+    }
+}
+
+function disableInteractions() {
+    const btn = document.querySelector('button[type="submit"]');
+    if (btn) {
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+        btn.textContent = 'Server Check Failed';
+    }
+    const inputs = document.querySelectorAll('input');
+    inputs.forEach(i => i.disabled = true);
+
+    // Also clear connections list if possible or show error
+    const connectionList = document.getElementById('connectionList');
+    if (connectionList) {
+        connectionList.innerHTML = '<p class="text-center text-gray-500 italic">Server configuration incomplete.</p>';
+    }
+}
+
+function disableInteractions() {
+    const btn = document.querySelector('button[type="submit"]');
+    if (btn) {
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+        btn.textContent = 'Server Check Failed';
+    }
+    const inputs = document.querySelectorAll('input');
+    inputs.forEach(i => i.disabled = true);
+
+    // Also clear connections list if possible or show error
+    const connectionList = document.getElementById('connectionList');
+    if (connectionList) {
+        connectionList.innerHTML = '<p class="text-center text-gray-500 italic">Server configuration incomplete.</p>';
     }
 }
 

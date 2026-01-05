@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ApiKeyService } from '../services/api-key';
 import { UserConfigService } from '../services/user-config';
 import { ConfigSchema } from '../config-schema';
+import { setOauthDiscoveryHeader } from '../utils/oauth-discovery';
 
 const router = Router();
 const apiKeyService = new ApiKeyService();
@@ -75,10 +76,16 @@ router.get('/api-keys/me', async (req, res) => {
     // So we will assume the key is passed in Authorization header.
 
     const token = req.headers.authorization?.replace('Bearer ', '') || req.headers['x-api-key'] as string;
-    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+    if (!token) {
+        setOauthDiscoveryHeader(req, res);
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     const key = await apiKeyService.validateApiKey(token);
-    if (!key) return res.status(401).json({ error: 'Invalid key' });
+    if (!key) {
+        setOauthDiscoveryHeader(req, res);
+        return res.status(401).json({ error: 'Invalid key' });
+    }
 
     res.json({
         id: key.id,
@@ -92,10 +99,16 @@ router.get('/api-keys/me', async (req, res) => {
 // Revoke Key
 router.post('/api-keys/revoke', async (req, res) => {
     const token = req.headers.authorization?.replace('Bearer ', '') || req.headers['x-api-key'] as string;
-    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+    if (!token) {
+        setOauthDiscoveryHeader(req, res);
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     const key = await apiKeyService.validateApiKey(token);
-    if (!key) return res.status(401).json({ error: 'Invalid key' });
+    if (!key) {
+        setOauthDiscoveryHeader(req, res);
+        return res.status(401).json({ error: 'Invalid key' });
+    }
 
     await apiKeyService.revokeApiKey(key.id);
     // Optionally revoke config if it's 1:1, but maybe they want to issue a new key for same config?

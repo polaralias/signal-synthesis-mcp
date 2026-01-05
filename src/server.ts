@@ -32,6 +32,7 @@ import { requestContext } from './context';
 import { validateApiKey } from './utils/auth';
 import { renderConnectPage } from './templates/connect-ui';
 import cookieParser from 'cookie-parser';
+import { unauthorized } from './utils/oauth-discovery';
 
 export class SignalSynthesisServer {
   private server: Server | null = null;
@@ -389,7 +390,7 @@ export class SignalSynthesisServer {
       app.use(tokenRouter);
       app.use(wellKnownRouter);
       app.use(registerRouter);
-      app.use(apiKeysRouter);
+      app.use("/api", apiKeysRouter);
 
       // --- Standardized Dashboard API ---
 
@@ -557,8 +558,7 @@ export class SignalSynthesisServer {
               }
             }
           } else if (session) {
-            res.status(401).json({ error: 'Unauthorized', message: 'Token expired' });
-            return;
+            return unauthorized(req, res, 'Token expired');
           }
         }
 
@@ -599,15 +599,13 @@ export class SignalSynthesisServer {
             }
             requestRouter = this.defaultRouter;
           } else if (!requestRouter) {
-            res.status(401).json({ error: 'Unauthorized', message: 'Invalid API Key' });
-            return;
+            return unauthorized(req, res, 'Invalid API Key');
           }
         }
 
         // 3. Fallback to 401
         if (!requestRouter) {
-          res.status(401).json({ error: 'Unauthorized', message: 'Authentication required' });
-          return;
+          return unauthorized(req, res, 'Authentication required');
         }
 
         // Accept header normalization

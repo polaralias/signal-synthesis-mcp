@@ -13,7 +13,9 @@ router.get('/.well-known/oauth-protected-resource', (req, res) => {
   const baseUrl = getBaseUrl(req);
   res.json({
     resource: baseUrl,
-    authorization_servers: [baseUrl]
+    authorization_servers: [baseUrl],
+    bearer_methods_supported: ["header"],
+    resource_documentation: `${baseUrl}/`
   });
 });
 
