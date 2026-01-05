@@ -402,6 +402,10 @@ export class SignalSynthesisServer {
         });
       });
 
+      app.get('/api/master-key-status', (req: Request, res: Response) => {
+        res.json({ configured: isMasterKeyPresent() });
+      });
+
       app.get('/api/connections', async (req: Request, res: Response) => {
         try {
           const connections = await prisma.connection.findMany({

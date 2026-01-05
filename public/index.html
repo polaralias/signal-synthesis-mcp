@@ -2,183 +2,98 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Financial MCP - Connection Manager</title>
+    <meta charset="UTF-8" />
+    <title>MCP Server</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#7b68ee',
-                        secondary: '#5f48ea',
-                        background: '#f8f9fc',
-                    }
-                }
-            }
+            theme: { extend: { colors: { primary: '#2563eb' } } }
         }
     </script>
 </head>
 
-<body class="bg-slate-50 min-h-screen font-sans selection:bg-blue-100 selection:text-blue-900">
-    <nav class="bg-white border-b border-slate-200 sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16 items-center">
-                <div class="flex items-center gap-2">
-                    <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="m21 11-8-8-9 9"></path>
-                            <path d="M7 8.5 7 22"></path>
-                            <path d="M17 8.5 17 22"></path>
-                            <path d="M12 3v19"></path>
-                        </svg>
-                    </div>
-                    <span class="text-xl font-bold tracking-tight text-slate-900">Signal Synthesis MCP</span>
-                </div>
-                <div class="text-sm font-medium text-slate-500">
-                    Connection Manager v1.0
+<body class="bg-gray-50 flex items-center justify-center min-h-screen text-gray-800">
+
+    <div class="max-w-md w-full bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+        <!-- Header -->
+        <div class="px-6 py-8 text-center border-b border-gray-100">
+            <h1 class="text-2xl font-bold text-gray-900 mb-2">MCP Server</h1>
+            <p class="text-sm text-gray-500">Model Context Protocol</p>
+        </div>
+
+        <!-- View: Dashboard (Default) -->
+        <div id="view-dashboard" class="p-6 space-y-6">
+            <!-- Status Banner -->
+            <div id="statusBanner" class="hidden rounded-lg p-4 text-sm border flex items-start gap-3">
+                <div id="statusIcon" class="text-lg"></div>
+                <div>
+                    <strong id="statusTitle" class="block font-medium mb-1"></strong>
+                    <span id="statusBody" class="block text-gray-600 mb-2"></span>
+                    <pre id="statusSnippet"
+                        class="hidden bg-gray-900 text-gray-100 p-2 rounded text-xs overflow-x-auto font-mono mt-1"></pre>
                 </div>
             </div>
-        </div>
-    </nav>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div class="text-center mb-12">
-            <h1 class="text-4xl font-extrabold text-gray-900 tracking-tight">Signal Synthesis MCP</h1>
-        </div>
+            <p class="text-center text-gray-600 text-sm">
+                This server provides tools and resources for AI assistants.
+            </p>
 
-        <!-- Master Key Missing Alert -->
-        <div id="masterKeyAlert" class="hidden mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-r shadow-sm">
-            <div class="flex">
-                <div class="flex-shrink-0">
-                    <svg class="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd"
-                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                            clip-rule="evenodd" />
-                    </svg>
-                </div>
-                <div class="ml-3">
-                    <h3 class="text-sm font-medium text-red-800">Configuration Required</h3>
-                    <div class="mt-2 text-sm text-red-700">
-                        <p>The <code>MASTER_KEY</code> environment variable is not configured. Server functionality is
-                            disabled.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Master Key Missing Alert -->
-        <div id="masterKeyAlert" class="hidden mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-r shadow-sm">
-            <div class="flex">
-                <div class="flex-shrink-0">
-                    <svg class="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd"
-                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                            clip-rule="evenodd" />
-                    </svg>
-                </div>
-                <div class="ml-3">
-                    <h3 class="text-sm font-medium text-red-800">Configuration Required</h3>
-                    <div class="mt-2 text-sm text-red-700">
-                        <p>The <code>MASTER_KEY</code> environment variable is not configured. Server functionality is
-                            disabled.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Authorization Mode Alert -->
-        <div id="authModeAlert" class="hidden mb-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r shadow-sm">
-            <div class="flex">
-                <div class="flex-shrink-0">
-                    <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd"
-                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                            clip-rule="evenodd" />
-                    </svg>
-                </div>
-                <div class="ml-3">
-                    <p class="text-sm text-blue-700">
-                        Select or create a connection to authorize access for the requesting application.
-                    </p>
-                </div>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <!-- Create Connection Card -->
-            <div class="bg-white p-8 rounded-xl shadow-lg border border-gray-100">
-                <h2 class="text-2xl font-bold mb-6 text-gray-800 border-b pb-2">Create Connection</h2>
-                <form id="createForm" class="space-y-5">
-                    <div>
-                        <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Connection Name</label>
-                        <input type="text" id="name" required placeholder="e.g. My Alpaca Connection"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-colors outline-none">
-                    </div>
-                    <div>
-                        <label for="alpacaKey" class="block text-sm font-medium text-gray-700 mb-1">Alpaca API
-                            Key</label>
-                        <input type="text" id="alpacaKey"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-colors outline-none font-mono text-sm">
-                    </div>
-                    <div>
-                        <label for="alpacaSecret" class="block text-sm font-medium text-gray-700 mb-1">Alpaca Secret
-                            Key</label>
-                        <input type="password" id="alpacaSecret"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-colors outline-none font-mono text-sm">
-                    </div>
-                    <div>
-                        <label for="polygonKey" class="block text-sm font-medium text-gray-700 mb-1">Polygon API
-                            Key</label>
-                        <input type="text" id="polygonKey"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-colors outline-none font-mono text-sm">
-                    </div>
-                    <button type="submit"
-                        class="w-full bg-primary hover:bg-secondary text-white font-semibold py-2 px-4 rounded-lg shadow transition-colors duration-200">
-                        Create Connection
-                    </button>
-                </form>
-            </div>
-
-            <!-- Existing Connections Card -->
-            <div class="bg-white p-8 rounded-xl shadow-lg border border-gray-100 flex flex-col">
-                <h2 class="text-2xl font-bold mb-6 text-gray-800 border-b pb-2">Existing Connections</h2>
-                <div id="connectionList" class="flex-grow space-y-4 overflow-y-auto max-h-[500px]">
-                    <div class="flex justify-center items-center h-full text-gray-400">Loading...</div>
-                </div>
-            </div>
-        </div>
-        </div>
-
-        <!-- Session Modal -->
-        <div id="sessionModal"
-            class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden flex items-center justify-center z-50">
-            <div class="bg-white rounded-xl shadow-2xl p-8 max-w-lg w-full mx-4 relative">
-                <h2 class="text-2xl font-bold text-gray-900 mb-4">Session Created</h2>
-                <p class="text-gray-600 mb-6">Use the following details to connect your MCP client:</p>
-
-                <div class="mb-4">
-                    <p class="text-sm font-bold text-gray-700 mb-1">MCP Endpoint:</p>
-                    <div class="bg-gray-100 p-3 rounded border border-gray-200 font-mono text-sm break-all"
-                        id="mcpEndpoint"></div>
-                </div>
-
-                <div class="mb-6">
-                    <p class="text-sm font-bold text-gray-700 mb-1">Authorization Header:</p>
-                    <div class="bg-blue-50 text-blue-800 p-4 rounded border border-blue-200 font-mono text-sm break-all"
-                        id="tokenDisplay"></div>
-                </div>
-
-                <button onclick="document.getElementById('sessionModal').classList.add('hidden')"
-                    class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg transition-colors">
-                    Close
+            <div class="space-y-3">
+                <button id="goProvision"
+                    class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2">
+                    <span>⚡ Provision API Key</span>
                 </button>
+                <a href="/connect"
+                    class="block w-full text-center py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors">
+                    OAuth Connect
+                </a>
             </div>
         </div>
 
-        <script src="app.js"></script>
+        <!-- View: Provisioning -->
+        <div id="view-provision" class="hidden p-6 space-y-6">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="text-lg font-semibold text-gray-900">Provision Key</h2>
+                <button id="backToDashboard" class="text-sm text-gray-500 hover:text-gray-700">← Back</button>
+            </div>
+
+            <form id="provisionForm" class="space-y-4">
+                <!-- Schema fields injected here -->
+            </form>
+
+            <button id="submitProvision"
+                class="w-full py-2.5 px-4 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors">
+                Generate Key
+            </button>
+
+            <!-- Results Area -->
+            <div id="provisionResult" class="space-y-4">
+                <div id="provisionError"
+                    class="hidden p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100"></div>
+
+                <div id="provisionSuccess" class="hidden space-y-3">
+                    <div class="p-4 bg-green-50 border border-green-100 rounded-lg">
+                        <label class="block text-xs font-bold text-green-800 uppercase mb-1">Your API Key</label>
+                        <div class="flex gap-2">
+                            <input readonly id="apiKeyOut"
+                                class="flex-1 bg-white border border-green-200 text-sm font-mono px-2 py-1 rounded text-gray-700 focus:outline-none"
+                                onclick="this.select()">
+                            <button id="copyKey"
+                                class="text-xs bg-white border border-green-200 px-3 py-1 rounded font-medium text-green-700 hover:bg-green-100">Copy</button>
+                        </div>
+                    </div>
+                    <p class="text-xs text-center text-gray-500">Save this key now. It will not be shown again.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="bg-gray-50 px-6 py-4 border-t border-gray-100 text-center">
+            <p class="text-xs text-gray-400">Powered by MCP</p>
+        </div>
+    </div>
+
+    <script src="/app.js"></script>
 </body>
 
 </html>
