@@ -18,7 +18,7 @@ import { enrichIntraday, enrichContext, enrichEod } from './tools/enrichment';
 import { rankSetups } from './tools/ranking';
 import { explainRouting } from './tools/debug';
 import { planAndRun } from './tools/orchestrator';
-import { hashToken, verifyToken, generateRandomString, hashCode } from './services/security';
+import { hashToken, verifyToken, generateRandomString, hashCode, encrypt } from './services/security';
 import { isMasterKeyPresent } from './security/masterKey';
 import connectRouter from './routes/connect';
 import tokenRouter from './routes/token';
@@ -423,8 +423,10 @@ export class SignalSynthesisServer {
           return res.status(403).json({ error: 'MASTER_KEY is not configured' });
         }
         try {
-          const { name, credentials } = req.body;
-          const configJson = JSON.stringify(credentials || {});
+          const { name, credentials, config } = req.body;
+          // Support both { name, credentials } (old) and { name, config } (ClickUp)
+          const configPayload = credentials || config || {};
+          const configJson = JSON.stringify(configPayload);
           const configEncrypted = encrypt(configJson);
 
           const connection = await prisma.connection.create({
@@ -472,44 +474,142 @@ export class SignalSynthesisServer {
         }
       });
 
-      // Adapter for Dashboard OAuth flow
-      app.post('/api/authorize', async (req: Request, res: Response) => {
+      // New ClickUp-compatible session creation endpoint
+      app.post('/api/sessions', async (req: Request, res: Response) => {
         if (!isMasterKeyPresent()) {
           return res.status(403).json({ error: 'MASTER_KEY is not configured' });
         }
         try {
-          const { connectionId, callbackUrl, state } = req.body;
+          const { connectionId } = req.body;
 
+          if (!connectionId) {
+            return res.status(400).json({ error: 'connectionId is required' });
+          }
+
+          // Verify connection exists
           const connection = await prisma.connection.findUnique({ where: { id: connectionId } });
           if (!connection) {
             return res.status(404).json({ error: 'Connection not found' });
           }
 
-          // Generate Auth Code (mirrors connect.ts logic)
-          const code = generateRandomString(32);
-          const codeHash = hashCode(code);
-          const expiresAt = new Date(Date.now() + 90 * 1000); // 90 seconds
+          const token = generateRandomString(64);
+          const tokenHash = await hashToken(token);
+          const expiresAt = new Date(Date.now() + 3600 * 1000); // 1 hour
 
-          await prisma.authCode.create({
+          await prisma.session.create({
             data: {
-              codeHash,
               connectionId,
-              redirectUri: callbackUrl,
-              state: state,
-              codeChallenge: '', // Standard dashboard flow might not use PKCE if it's internal?
-              codeChallengeMethod: 'S256',
+              tokenHash,
               expiresAt,
             }
           });
-
-          const redirectUrl = new URL(callbackUrl);
-          redirectUrl.searchParams.append('code', code);
-          if (state) redirectUrl.searchParams.append('state', state);
-
-          res.json({ redirectUrl: redirectUrl.toString() });
+          // Return as accessToken for ClickUp compatibility
+          res.json({ accessToken: token });
         } catch (error) {
-          console.error('[API] Authorization failed:', error);
-          res.status(500).json({ error: 'Authorization failed' });
+          console.error('[API] Failed to create session:', error);
+          res.status(500).json({ error: 'Failed to create session' });
+        }
+      });
+
+      // Get connection details with sanitized config
+      app.get('/api/connections/:id', async (req: Request, res: Response) => {
+        try {
+          const connectionId = req.params.id;
+          const connection = await prisma.connection.findUnique({ 
+            where: { id: connectionId }
+          });
+
+          if (!connection) {
+            return res.status(404).json({ error: 'Connection not found' });
+          }
+
+          // Decrypt and sanitize config
+          let sanitizedConfig = {};
+          try {
+            const configString = decrypt(connection.configEncrypted);
+            const config = JSON.parse(configString);
+            
+            // Redact sensitive fields
+            sanitizedConfig = Object.keys(config).reduce((acc: any, key: string) => {
+              const lowerKey = key.toLowerCase();
+              if (lowerKey.includes('key') || lowerKey.includes('secret') || 
+                  lowerKey.includes('password') || lowerKey.includes('token')) {
+                acc[key] = '***REDACTED***';
+              } else {
+                acc[key] = config[key];
+              }
+              return acc;
+            }, {});
+          } catch (e) {
+            console.error('Failed to decrypt config for connection detail', e);
+          }
+
+          res.json({
+            id: connection.id,
+            name: connection.displayName,
+            displayName: connection.displayName,
+            createdAt: connection.createdAt,
+            config: sanitizedConfig
+          });
+        } catch (error) {
+          console.error('[API] Failed to get connection:', error);
+          res.status(500).json({ error: 'Failed to get connection' });
+        }
+      });
+
+      // Get sessions for a connection
+      app.get('/api/connections/:id/sessions', async (req: Request, res: Response) => {
+        try {
+          const connectionId = req.params.id;
+          const sessions = await prisma.session.findMany({
+            where: { connectionId },
+            orderBy: { createdAt: 'desc' }
+          });
+
+          res.json(sessions.map(session => ({
+            id: session.id,
+            expiresAt: session.expiresAt,
+            revoked: !!session.revokedAt,
+            revokedAt: session.revokedAt,
+            createdAt: session.createdAt
+          })));
+        } catch (error) {
+          console.error('[API] Failed to get sessions:', error);
+          res.status(500).json({ error: 'Failed to get sessions' });
+        }
+      });
+
+      // Revoke a session
+      app.post('/api/sessions/:id/revoke', async (req: Request, res: Response) => {
+        try {
+          const sessionId = req.params.id;
+          const session = await prisma.session.findUnique({ where: { id: sessionId } });
+
+          if (!session) {
+            return res.status(404).json({ error: 'Session not found' });
+          }
+
+          await prisma.session.update({
+            where: { id: sessionId },
+            data: { revokedAt: new Date() }
+          });
+
+          res.json({ success: true });
+        } catch (error) {
+          console.error('[API] Failed to revoke session:', error);
+          res.status(500).json({ error: 'Failed to revoke session' });
+        }
+      });
+
+      // Delete a connection
+      app.delete('/api/connections/:id', async (req: Request, res: Response) => {
+        try {
+          const connectionId = req.params.id;
+          await prisma.connection.delete({ where: { id: connectionId } });
+          res.json({ success: true });
+        } catch (error) {
+          console.error('[API] Failed to delete connection:', error);
+          res.status(500).json({ error: 'Failed to delete connection' });
         }
       });
 
@@ -573,9 +673,9 @@ export class SignalSynthesisServer {
           if (process.env.API_KEY_MODE === 'user_bound') {
             const apiKeyService = new ApiKeyService();
             const validKey = await apiKeyService.validateApiKey(apiKey);
-            if (validKey && validKey.userConfig) {
+            if (validKey && (validKey as any).userConfig) {
               try {
-                const configJson = decrypt(validKey.userConfig.configEncrypted);
+                const configJson = decrypt((validKey as any).userConfig.configEncrypted);
                 const userConfig = JSON.parse(configJson);
 
                 const routerKey = `user_bound:${validKey.id}`;

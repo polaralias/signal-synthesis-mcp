@@ -36,7 +36,7 @@ export function getConfigMetadata() {
 
     return {
       name: key,
-      label: key,
+      label: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
       type: (key.includes('KEY') || key.includes('SECRET')) ? 'password' : 'text',
       required: !isOptional,
     };
