@@ -9,11 +9,6 @@ const router = Router();
 const apiKeyService = new ApiKeyService();
 const userConfigService = new UserConfigService();
 
-// Schema for key issuance
-const IssueKeySchema = z.object({
-    config: ConfigSchema,
-    turnstileToken: z.string().optional(),
-});
 
 // Middleware to check if user-bound mode is enabled
 const requireUserBoundMode = (req: any, res: any, next: any) => {
@@ -33,13 +28,14 @@ router.post('/api-keys', requireUserBoundMode, async (req, res) => {
             // TODO: Implement Turnstile validation
         }
 
-        // 3. Validate Config
-        const result = IssueKeySchema.safeParse(req.body);
+        // 3. Unwrap and Validate Config
+        const body = req.body ?? {};
+        const config = (body && typeof body === "object" && "config" in body) ? (body as any).config : body;
+
+        const result = ConfigSchema.safeParse(config);
         if (!result.success) {
             return res.status(400).json({ error: 'Invalid configuration', details: result.error.format() });
         }
-
-        const { config } = result.data;
 
         // 4. Create User Config
         // Provide a default display name or derive from config

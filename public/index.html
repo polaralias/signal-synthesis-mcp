@@ -1,99 +1,95 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8" />
-    <title>MCP Server</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: { extend: { colors: { primary: '#2563eb' } } }
-        }
-    </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCP Server</title>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
 
-<body class="bg-gray-50 flex items-center justify-center min-h-screen text-gray-800">
+<body class="bg-gray-50 text-gray-900">
+  <div class="max-w-3xl mx-auto p-6">
 
-    <div class="max-w-md w-full bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-        <!-- Header -->
-        <div class="px-6 py-8 text-center border-b border-gray-100">
-            <h1 class="text-2xl font-bold text-gray-900 mb-2">MCP Server</h1>
-            <p class="text-sm text-gray-500">Model Context Protocol</p>
+    <header class="mb-6">
+      <h1 class="text-2xl font-bold">MCP Server</h1>
+      <p class="text-gray-600">OAuth + API key provisioning UI</p>
+    </header>
+
+    <div id="masterKeyBanner" class="mb-6 hidden">
+      <div class="rounded-lg border p-4">
+        <div class="flex items-start gap-3">
+          <div id="masterKeyIcon" class="text-xl">❌</div>
+          <div class="flex-1">
+            <div id="masterKeyTitle" class="font-semibold">Setup required</div>
+            <div id="masterKeyBody" class="text-sm text-gray-700 mt-1"></div>
+            <pre id="masterKeySnippet" class="mt-3 text-xs bg-gray-100 p-3 rounded overflow-auto"></pre>
+          </div>
         </div>
-
-        <!-- View: Dashboard (Default) -->
-        <div id="view-dashboard" class="p-6 space-y-6">
-            <!-- Status Banner -->
-            <div id="statusBanner" class="hidden rounded-lg p-4 text-sm border flex items-start gap-3">
-                <div id="statusIcon" class="text-lg"></div>
-                <div>
-                    <strong id="statusTitle" class="block font-medium mb-1"></strong>
-                    <span id="statusBody" class="block text-gray-600 mb-2"></span>
-                    <pre id="statusSnippet"
-                        class="hidden bg-gray-900 text-gray-100 p-2 rounded text-xs overflow-x-auto font-mono mt-1"></pre>
-                </div>
-            </div>
-
-            <p class="text-center text-gray-600 text-sm">
-                This server provides tools and resources for AI assistants.
-            </p>
-
-            <div class="space-y-3">
-                <button id="goProvision"
-                    class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2">
-                    <span>⚡ Provision API Key</span>
-                </button>
-                <a href="/connect"
-                    class="block w-full text-center py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors">
-                    OAuth Connect
-                </a>
-            </div>
-        </div>
-
-        <!-- View: Provisioning -->
-        <div id="view-provision" class="hidden p-6 space-y-6">
-            <div class="flex items-center justify-between mb-2">
-                <h2 class="text-lg font-semibold text-gray-900">Provision Key</h2>
-                <button id="backToDashboard" class="text-sm text-gray-500 hover:text-gray-700">← Back</button>
-            </div>
-
-            <form id="provisionForm" class="space-y-4">
-                <!-- Schema fields injected here -->
-            </form>
-
-            <button id="submitProvision"
-                class="w-full py-2.5 px-4 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors">
-                Generate Key
-            </button>
-
-            <!-- Results Area -->
-            <div id="provisionResult" class="space-y-4">
-                <div id="provisionError"
-                    class="hidden p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100"></div>
-
-                <div id="provisionSuccess" class="hidden space-y-3">
-                    <div class="p-4 bg-green-50 border border-green-100 rounded-lg">
-                        <label class="block text-xs font-bold text-green-800 uppercase mb-1">Your API Key</label>
-                        <div class="flex gap-2">
-                            <input readonly id="apiKeyOut"
-                                class="flex-1 bg-white border border-green-200 text-sm font-mono px-2 py-1 rounded text-gray-700 focus:outline-none"
-                                onclick="this.select()">
-                            <button id="copyKey"
-                                class="text-xs bg-white border border-green-200 px-3 py-1 rounded font-medium text-green-700 hover:bg-green-100">Copy</button>
-                        </div>
-                    </div>
-                    <p class="text-xs text-center text-gray-500">Save this key now. It will not be shown again.</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Footer -->
-        <div class="bg-gray-50 px-6 py-4 border-t border-gray-100 text-center">
-            <p class="text-xs text-gray-400">Powered by MCP</p>
-        </div>
+      </div>
     </div>
 
-    <script src="/app.js"></script>
-</body>
+    <div class="bg-white rounded-xl shadow-sm border p-6">
 
+      <div id="view-dashboard" class="hidden">
+        <div class="space-y-4">
+          <div class="rounded-lg border p-4">
+            <div class="font-semibold">OAuth</div>
+            <p class="text-sm text-gray-600 mt-1">
+              Connect via OAuth using a compatible client.
+            </p>
+            <a href="/connect" class="inline-flex mt-3 items-center justify-center px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+              Start OAuth connect
+            </a>
+          </div>
+
+          <div class="rounded-lg border p-4">
+            <div class="font-semibold">API Key (for clients without OAuth)</div>
+            <p class="text-sm text-gray-600 mt-1">
+              Generate an API key by entering your credentials.
+            </p>
+            <button id="goProvision"
+              class="inline-flex mt-3 items-center justify-center px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+              Generate API key
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-provision" class="hidden">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <div class="text-lg font-semibold">Generate API key</div>
+            <div class="text-sm text-gray-600">Enter credentials to create a key.</div>
+          </div>
+          <button id="backToDashboard" class="text-sm text-blue-700 hover:underline">Back</button>
+        </div>
+
+        <form id="provisionForm" class="space-y-4"></form>
+
+        <button id="submitProvision"
+          class="w-full mt-2 inline-flex items-center justify-center px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+          Create API key
+        </button>
+
+        <div id="provisionError" class="hidden mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"></div>
+
+        <div id="provisionSuccess" class="hidden mt-4 rounded-lg border border-green-200 bg-green-50 p-4">
+          <div class="font-semibold">API key created</div>
+          <div class="text-sm text-gray-700 mt-1">Copy this key now. It may not be shown again.</div>
+          <div class="mt-3 flex gap-2">
+            <input id="apiKeyOut" class="flex-1 px-3 py-2 rounded-lg border bg-white font-mono text-sm" readonly />
+            <button id="copyKey" type="button"
+              class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+              Copy
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script src="/app.js"></script>
+</body>
 </html>

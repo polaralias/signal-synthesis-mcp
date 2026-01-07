@@ -35,14 +35,10 @@ export function getConfigMetadata() {
     }
 
     return {
-      key: key,
+      name: key,
       label: key,
-      type: 'string', // Assuming all are strings for simplicity for now
+      type: (key.includes('KEY') || key.includes('SECRET')) ? 'password' : 'text',
       required: !isOptional,
-      secret: key.includes('KEY') || key.includes('SECRET'), // Heuristic for secret fields
-      default: "",
-      enum: [] as string[],
-      help: description || "Where to find this value"
     };
   });
 
