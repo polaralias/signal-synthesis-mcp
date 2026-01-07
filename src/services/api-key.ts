@@ -1,6 +1,8 @@
-import { PrismaClient, ApiKey } from '@prisma/client';
+import { PrismaClient, ApiKey, UserConfig } from '@prisma/client';
 import { hashToken, generateRandomString } from '../security/crypto';
 import { prisma } from './database';
+
+type ApiKeyWithUserConfig = ApiKey & { userConfig: UserConfig };
 
 export class ApiKeyService {
     private prisma: PrismaClient;
@@ -24,7 +26,7 @@ export class ApiKeyService {
         return { apiKey: rawKey, model: apiKey };
     }
 
-    async validateApiKey(rawKey: string): Promise<ApiKey | null> {
+    async validateApiKey(rawKey: string): Promise<ApiKeyWithUserConfig | null> {
         const keyHash = hashToken(rawKey);
         const apiKey = await this.prisma.apiKey.findUnique({
             where: { keyHash },
