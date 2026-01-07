@@ -26,7 +26,7 @@ import wellKnownRouter from './routes/well-known';
 import registerRouter from './routes/register';
 import apiKeysRouter from './routes/api-keys';
 import { ApiKeyService } from './services/api-key';
-import { decrypt } from './security/crypto';
+import { decrypt, encrypt } from './security/crypto';
 import { prisma } from './services/database';
 import { requestContext } from './context';
 import { validateApiKey } from './utils/auth';
@@ -423,8 +423,10 @@ export class SignalSynthesisServer {
           return res.status(403).json({ error: 'MASTER_KEY is not configured' });
         }
         try {
-          const { name, credentials } = req.body;
-          const configJson = JSON.stringify(credentials || {});
+          const { name, credentials, config } = req.body;
+          // Support both {name, credentials} and {name, config} formats
+          const configData = credentials ?? config ?? {};
+          const configJson = JSON.stringify(configData);
           const configEncrypted = encrypt(configJson);
 
           const connection = await prisma.connection.create({
@@ -472,17 +474,168 @@ export class SignalSynthesisServer {
         }
       });
 
+      // New ClickUp-compatible endpoint: POST /api/sessions
+      app.post('/api/sessions', async (req: Request, res: Response) => {
+        if (!isMasterKeyPresent()) {
+          return res.status(403).json({ error: 'MASTER_KEY is not configured' });
+        }
+        try {
+          const { connectionId } = req.body;
+
+          // Verify connection exists
+          const connection = await prisma.connection.findUnique({ where: { id: connectionId } });
+          if (!connection) {
+            return res.status(404).json({ error: 'Connection not found' });
+          }
+
+          const token = generateRandomString(64);
+          const tokenHash = await hashToken(token);
+          const expiresAt = new Date(Date.now() + 3600 * 1000); // 1 hour
+
+          await prisma.session.create({
+            data: {
+              connectionId,
+              tokenHash,
+              expiresAt,
+            }
+          });
+          res.json({ accessToken: token });
+        } catch (error) {
+          console.error('[API] Failed to create session:', error);
+          res.status(500).json({ error: 'Failed to create session' });
+        }
+      });
+
+      // GET /api/connections/:id - Return safe connection metadata
+      app.get('/api/connections/:id', async (req: Request, res: Response) => {
+        try {
+          const connectionId = req.params.id;
+          const connection = await prisma.connection.findUnique({ 
+            where: { id: connectionId } 
+          });
+
+          if (!connection) {
+            return res.status(404).json({ error: 'Connection not found' });
+          }
+
+          // Sanitize config (redact secrets)
+          let sanitizedConfig = {};
+          try {
+            const configJson = decrypt(connection.configEncrypted);
+            const config = JSON.parse(configJson);
+            
+            // Redact sensitive fields
+            sanitizedConfig = Object.entries(config).reduce((acc, [key, value]) => {
+              const lowerKey = key.toLowerCase();
+              if (lowerKey.includes('key') || lowerKey.includes('secret') || 
+                  lowerKey.includes('password') || lowerKey.includes('token')) {
+                acc[key] = '***REDACTED***';
+              } else {
+                acc[key] = value;
+              }
+              return acc;
+            }, {} as Record<string, any>);
+          } catch (e) {
+            console.error('Failed to decrypt config for connection', connectionId, e);
+          }
+
+          res.json({
+            id: connection.id,
+            name: connection.displayName,
+            createdAt: connection.createdAt,
+            config: sanitizedConfig
+          });
+        } catch (error) {
+          console.error('[API] Failed to fetch connection:', error);
+          res.status(500).json({ error: 'Failed to fetch connection' });
+        }
+      });
+
+      // GET /api/connections/:id/sessions - List sessions for a connection
+      app.get('/api/connections/:id/sessions', async (req: Request, res: Response) => {
+        try {
+          const connectionId = req.params.id;
+          const sessions = await prisma.session.findMany({
+            where: { connectionId },
+            orderBy: { createdAt: 'desc' }
+          });
+
+          res.json(sessions.map(s => ({
+            id: s.id,
+            expiresAt: s.expiresAt,
+            revoked: !!s.revokedAt,
+            revokedAt: s.revokedAt,
+            createdAt: s.createdAt
+          })));
+        } catch (error) {
+          console.error('[API] Failed to fetch sessions:', error);
+          res.status(500).json({ error: 'Failed to fetch sessions' });
+        }
+      });
+
+      // POST /api/sessions/:id/revoke - Revoke a session
+      app.post('/api/sessions/:id/revoke', async (req: Request, res: Response) => {
+        if (!isMasterKeyPresent()) {
+          return res.status(403).json({ error: 'MASTER_KEY is not configured' });
+        }
+        try {
+          const sessionId = req.params.id;
+          await prisma.session.update({
+            where: { id: sessionId },
+            data: { revokedAt: new Date() }
+          });
+          res.json({ success: true });
+        } catch (error) {
+          console.error('[API] Failed to revoke session:', error);
+          res.status(500).json({ error: 'Failed to revoke session' });
+        }
+      });
+
+      // DELETE /api/connections/:id - Delete a connection
+      app.delete('/api/connections/:id', async (req: Request, res: Response) => {
+        if (!isMasterKeyPresent()) {
+          return res.status(403).json({ error: 'MASTER_KEY is not configured' });
+        }
+        try {
+          const connectionId = req.params.id;
+          await prisma.connection.delete({ where: { id: connectionId } });
+          res.json({ success: true });
+        } catch (error) {
+          console.error('[API] Failed to delete connection:', error);
+          res.status(500).json({ error: 'Failed to delete connection' });
+        }
+      });
+
       // Adapter for Dashboard OAuth flow
       app.post('/api/authorize', async (req: Request, res: Response) => {
         if (!isMasterKeyPresent()) {
           return res.status(403).json({ error: 'MASTER_KEY is not configured' });
         }
         try {
-          const { connectionId, callbackUrl, state } = req.body;
+          const { connectionId, callbackUrl, state, clientId } = req.body;
 
           const connection = await prisma.connection.findUnique({ where: { id: connectionId } });
           if (!connection) {
             return res.status(404).json({ error: 'Connection not found' });
+          }
+
+          // Use provided clientId or create/find a default internal client
+          let effectiveClientId = clientId;
+          if (!effectiveClientId) {
+            // Create or find a default internal client for dashboard flows
+            const defaultClient = await prisma.oAuthClient.upsert({
+              where: { id: 'internal-dashboard' },
+              create: {
+                id: 'internal-dashboard',
+                clientName: 'Internal Dashboard',
+                redirectUris: [callbackUrl],
+                tokenEndpointAuthMethod: 'none'
+              },
+              update: {
+                redirectUris: [callbackUrl]
+              }
+            });
+            effectiveClientId = defaultClient.id;
           }
 
           // Generate Auth Code (mirrors connect.ts logic)
@@ -494,9 +647,10 @@ export class SignalSynthesisServer {
             data: {
               codeHash,
               connectionId,
+              clientId: effectiveClientId,
               redirectUri: callbackUrl,
-              state: state,
-              codeChallenge: '', // Standard dashboard flow might not use PKCE if it's internal?
+              state: state || '',
+              codeChallenge: '', // Standard dashboard flow might not use PKCE if it's internal
               codeChallengeMethod: 'S256',
               expiresAt,
             }
