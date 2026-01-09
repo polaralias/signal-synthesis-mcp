@@ -49,6 +49,9 @@ COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/clie
 # Copy built artifacts from builder
 COPY --from=builder /app/dist ./dist
 
+# Copy public directory for static assets
+COPY public ./public
+
 # Expose the port the app runs on (default 3000)
 EXPOSE 3000
 
