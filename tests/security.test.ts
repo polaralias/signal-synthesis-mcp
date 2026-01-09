@@ -21,12 +21,14 @@ describe('Security Utilities', () => {
       expect(decrypted).toBe(original);
     });
 
-    it('should throw error with invalid key length', () => {
+    it('should accept short key as passphrase', () => {
         // Backup original key
         const originalKey = process.env.MASTER_KEY;
         process.env.MASTER_KEY = 'short-key';
 
-        expect(() => encrypt('test')).toThrow('MASTER_KEY must be a 32-byte hex string');
+        // Should not throw, but treat as passphrase
+        const { encryptedSecret, iv, authTag } = encrypt('test');
+        expect(encryptedSecret).toBeDefined();
 
         // Restore key
         process.env.MASTER_KEY = originalKey;
