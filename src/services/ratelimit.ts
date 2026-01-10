@@ -1,42 +1,23 @@
-interface RateLimitEntry {
-  count: number;
-  resetAt: number;
-}
 
-const rates = new Map<string, RateLimitEntry>();
+// Simple in-memory rate limiter for demo purposes
+// In production, this should be backed by Redis
+const limits = new Map<string, number[]>();
 
-/**
- * Checks if a key has exceeded the rate limit.
- * @param key Unique key (e.g. IP address + action)
- * @param limit Max requests allowed
- * @param windowSeconds Time window in seconds
- * @returns true if allowed, false if limit exceeded
- */
 export function checkRateLimit(key: string, limit: number, windowSeconds: number): boolean {
   const now = Date.now();
-  let entry = rates.get(key);
+  const windowStart = now - (windowSeconds * 1000);
 
-  if (!entry || now > entry.resetAt) {
-    entry = { count: 0, resetAt: now + windowSeconds * 1000 };
-    rates.set(key, entry);
-  }
+  let timestamps = limits.get(key) || [];
 
-  if (entry.count >= limit) {
+  // Clean up old timestamps
+  timestamps = timestamps.filter(t => t > windowStart);
+
+  if (timestamps.length >= limit) {
+    limits.set(key, timestamps);
     return false;
   }
 
-  entry.count++;
+  timestamps.push(now);
+  limits.set(key, timestamps);
   return true;
 }
-
-function cleanupRateLimits() {
-    const now = Date.now();
-    for (const [key, entry] of rates.entries()) {
-        if (now > entry.resetAt) {
-            rates.delete(key);
-        }
-    }
-}
-
-// Clean up periodically
-setInterval(cleanupRateLimits, 60000).unref();

@@ -1,40 +1,24 @@
 const API_BASE = '/api';
-let currentConnectionId = null;
 
-// Parse query parameters
 const urlParams = new URLSearchParams(window.location.search);
 const redirectUri = urlParams.get('redirect_uri') || urlParams.get('callback_url');
 const state = urlParams.get('state');
 
-// Initialization
 document.addEventListener('DOMContentLoaded', async () => {
-    // Try to load user-bound config schema first
     try {
         const res = await fetch(`${API_BASE}/config-schema`);
         if (res.ok) {
             const schema = await res.json();
             renderConfigForm(schema);
-            document.getElementById('view-dashboard').classList.add('hidden');
             document.getElementById('view-config-entry').classList.remove('hidden');
+            await fetchConfigStatus();
             return;
         }
     } catch (e) {
-        console.log("Not in user-bound mode or failed to fetch schema", e);
+        console.error('Failed to load config schema', e);
     }
 
-    // Fallback to existing dashboard logic
-    fetchConfigStatus();
-    if (redirectUri) {
-        // OAuth Mode
-        showCreate();
-        document.getElementById('view-dashboard').classList.add('hidden');
-        document.getElementById('cancel-btn').classList.add('hidden'); // Cannot cancel in OAuth flow
-        document.getElementById('save-btn').innerText = 'Authorize & Connect';
-        // Auto-fill form if needed or show empty
-    } else {
-        // Dashboard Mode
-        loadConnections();
-    }
+    await fetchConfigStatus();
 });
 
 async function fetchConfigStatus() {
@@ -51,360 +35,176 @@ async function fetchConfigStatus() {
         banner.classList.remove('hidden');
         if (data.status === 'present') {
             banner.className = 'mb-6 p-4 rounded-lg border bg-green-50 border-green-200 text-green-800';
-            icon.innerHTML = '✅';
-            title.innerText = 'Configured';
-            message.innerText = `Master key is present`;
-            guidance.classList.add('hidden');
+            icon.innerText = '✅';
+            title.innerText = 'Server is configured';
+            message.innerText = `Encryption key is set (${data.format}).`;
+            guidance.innerText = '';
         } else {
             banner.className = 'mb-6 p-4 rounded-lg border bg-red-50 border-red-200 text-red-800';
-            icon.innerHTML = '❌';
-            title.innerText = 'Server not configured: MASTER_KEY missing';
-            message.innerText = 'Please set the MASTER_KEY environment variable.';
-            guidance.classList.remove('hidden');
+            icon.innerText = '❌';
+            title.innerText = 'Server is not configured';
+            message.innerText = 'The required encryption key is missing. User-bound API keys cannot be issued.';
+            guidance.innerText = 'Set the server encryption key environment variable to enable secure storage and key issuance.';
         }
     } catch (e) {
-        console.error('Failed to fetch config status', e);
+        banner.classList.remove('hidden');
+        banner.className = 'mb-6 p-4 rounded-lg border bg-red-50 border-red-200 text-red-800';
+        icon.innerText = '❌';
+        title.innerText = 'Unable to check server status';
+        message.innerText = 'Could not reach /api/config-status. Is the server running?';
+        guidance.innerText = '';
     }
 }
-
-function showCreate() {
-    document.getElementById('view-dashboard').classList.add('hidden');
-    document.getElementById('view-detail').classList.add('hidden');
-    document.getElementById('view-create').classList.remove('hidden');
-}
-
-function hideCreate() {
-    if (redirectUri) return; // Cannot cancel in OAuth mode
-    document.getElementById('view-create').classList.add('hidden');
-    document.getElementById('view-dashboard').classList.remove('hidden');
-    document.getElementById('config-form').reset();
-}
-
-function hideDetail() {
-    document.getElementById('view-detail').classList.add('hidden');
-    document.getElementById('view-dashboard').classList.remove('hidden');
-    currentConnectionId = null;
-}
-
-async function loadConnections() {
-    try {
-        const res = await fetch(`${API_BASE}/connections`);
-        const banner = document.getElementById('config-status-banner');
-        const isUnconfigured = banner && !banner.classList.contains('hidden') && banner.classList.contains('bg-red-50');
-
-        if (res.status === 500 || res.status === 403) {
-            const data = await res.json();
-
-            // If the banner already shows the server is not configured, don't repeat the error in the list
-            if (isUnconfigured && data.error && data.error.includes('MASTER_KEY')) {
-                document.getElementById('list-container').innerHTML = '';
-                return;
-            }
-
-            document.getElementById('list-container').innerHTML = `<p class="text-red-600">Error: ${data.error}</p>`;
-            return;
-        }
-        const data = await res.json();
-        const container = document.getElementById('list-container');
-
-        if (data.length === 0) {
-            container.innerHTML = '<p class="text-gray-500 text-center">No connections found.</p>';
-            return;
-        }
-
-        container.innerHTML = data.map(conn => `
-            <div class="bg-white border rounded p-4 flex justify-between items-center hover:bg-gray-50 transition">
-                <div>
-                    <h3 class="font-medium text-gray-800">${conn.name}</h3>
-                    <p class="text-xs text-gray-500">ID: ${conn.id}</p>
-                </div>
-                <div class="space-x-2">
-                    <button onclick="viewConnection('${conn.id}')" class="text-blue-600 hover:text-blue-800 text-sm font-medium">Manage</button>
-                    <button onclick="deleteConnection('${conn.id}')" class="text-red-500 hover:text-red-700 text-sm">Delete</button>
-                </div>
-            </div>
-        `).join('');
-    } catch (e) {
-        console.error(e);
-        document.getElementById('list-container').innerHTML = '<p class="text-red-600">Failed to load connections.</p>';
-    }
-}
-
-async function handleSave(event) {
-    event.preventDefault();
-    const btn = document.getElementById('save-btn');
-    const originalText = btn.innerText;
-    btn.disabled = true;
-    btn.innerText = 'Saving...';
-
-    const name = document.getElementById('conn-name').value || 'Signal Synthesis Connection';
-
-    // Build config object from dynamic fields
-    const config = {};
-    const dynamicFields = document.getElementById('dynamic-config-fields');
-    if (dynamicFields) {
-        const inputs = dynamicFields.querySelectorAll('input, select, textarea');
-        inputs.forEach(input => {
-            if (input.name) {
-                if (input.type === 'checkbox') {
-                    config[input.name] = input.checked;
-                } else {
-                    config[input.name] = input.value;
-                }
-            }
-        });
-    }
-
-    try {
-        // 1. Create Connection
-        const res = await fetch(`${API_BASE}/connections`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, config })
-        });
-        const connData = await res.json();
-
-        if (connData.error) throw new Error(connData.error);
-
-        if (redirectUri) {
-            // OAuth Mode: Request Auth Code and Redirect
-            const authRes = await fetch(`${API_BASE}/authorize`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    connectionId: connData.id,
-                    callbackUrl: redirectUri,
-                    state: state
-                })
-            });
-            const authData = await authRes.json();
-            if (authData.error) throw new Error(authData.error);
-
-            window.location.href = authData.redirectUrl;
-        } else {
-            // Dashboard Mode: Return to list
-            hideCreate();
-            loadConnections();
-        }
-    } catch (e) {
-        alert(e.message);
-    } finally {
-        btn.disabled = false;
-        btn.innerText = originalText;
-    }
-}
-
-async function deleteConnection(id) {
-    if (!confirm('Are you sure you want to delete this connection?')) return;
-    try {
-        await fetch(`${API_BASE}/connections/${id}`, { method: 'DELETE' });
-        loadConnections();
-    } catch (e) {
-        alert('Failed to delete connection: ' + e.message);
-    }
-}
-
-async function viewConnection(id) {
-    currentConnectionId = id;
-    try {
-        const res = await fetch(`${API_BASE}/connections/${id}`);
-        const data = await res.json();
-
-        document.getElementById('view-dashboard').classList.add('hidden');
-        document.getElementById('view-detail').classList.remove('hidden');
-        document.getElementById('session-output').classList.add('hidden');
-
-        const config = data.config || {};
-        let configHtml = `
-            <div class="grid grid-cols-2 gap-x-4 gap-y-2">
-                <span class="font-medium text-gray-600">Name:</span> <span class="text-gray-900">${data.name}</span>
-                <span class="font-medium text-gray-600">ID:</span> <span class="text-gray-900 text-xs">${data.id}</span>
-        `;
-        
-        // Display sanitized config keys
-        for (const [key, value] of Object.entries(config)) {
-            if (typeof value !== 'object') {
-                configHtml += `
-                    <span class="font-medium text-gray-600">${key}:</span> 
-                    <span class="text-gray-900">${value === true ? 'Yes' : value === false ? 'No' : value}</span>
-                `;
-            }
-        }
-        
-        configHtml += `</div>`;
-        
-        if (data.createdAt) {
-            configHtml += `<div class="mt-2 text-xs text-gray-400">Created: ${new Date(data.createdAt).toLocaleString()}</div>`;
-        }
-
-        document.getElementById('detail-content').innerHTML = configHtml;
-
-        loadSessions();
-    } catch (e) {
-        console.error(e);
-        alert('Failed to load connection details');
-    }
-}
-
-async function createSession() {
-    if (!currentConnectionId) return;
-
-    try {
-        const res = await fetch(`${API_BASE}/sessions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ connectionId: currentConnectionId })
-        });
-        const data = await res.json();
-
-        if (data.error) throw new Error(data.error);
-
-        document.getElementById('session-output').classList.remove('hidden');
-        document.getElementById('token-display').innerText = data.accessToken;
-        loadSessions();
-    } catch (e) {
-        alert(e.message);
-    }
-}
-
-async function loadSessions() {
-    if (!currentConnectionId) return;
-
-    try {
-        const res = await fetch(`${API_BASE}/connections/${currentConnectionId}/sessions`);
-        const data = await res.json();
-
-        const container = document.getElementById('session-list');
-        if (data.length === 0) {
-            container.innerHTML = '<p class="text-gray-500 text-sm">No active sessions.</p>';
-            return;
-        }
-
-        container.innerHTML = data.map(sess => {
-            const isRevoked = sess.revoked || sess.revokedAt;
-            const isExpired = new Date(sess.expiresAt) < new Date();
-            const status = isRevoked ? 'Revoked' : (isExpired ? 'Expired' : 'Active');
-            const statusColor = isRevoked || isExpired ? 'text-gray-500' : 'text-green-600';
-
-            return `
-                <div class="flex justify-between items-center text-sm p-2 bg-white border rounded">
-                    <div>
-                        <span class="font-mono text-xs text-gray-600">${sess.id.substring(0, 8)}...</span>
-                        <span class="ml-2 ${statusColor} font-medium">${status}</span>
-                        <div class="text-xs text-gray-400">Exp: ${new Date(sess.expiresAt).toLocaleDateString()}</div>
-                    </div>
-                    ${!isRevoked ? `<button onclick="revokeSession('${sess.id}')" class="text-red-500 hover:text-red-700 text-xs border border-red-200 px-2 py-1 rounded">Revoke</button>` : ''}
-                </div>
-            `;
-        }).join('');
-    } catch (e) {
-        console.error(e);
-    }
-}
-
-async function revokeSession(sessionId) {
-    if (!confirm('Revoke this session? Client will lose access immediately.')) return;
-    try {
-        await fetch(`${API_BASE}/sessions/${sessionId}/revoke`, { method: 'POST' });
-        loadSessions();
-    } catch (e) {
-        alert('Failed to revoke session: ' + e.message);
-    }
-}
-
-function copyToken() {
-    const text = document.getElementById('token-display').innerText;
-    navigator.clipboard.writeText(text).then(() => {
-        alert('Copied to clipboard!');
-    });
-}
-
-// --- User Bound API Key Flow ---
 
 function renderConfigForm(schema) {
     const container = document.getElementById('config-fields-container');
-    container.innerHTML = schema.fields.map(field => {
-        const requiredMark = field.required ? '<span class="text-red-500">*</span>' : '';
-        const helpText = field.helpText ? `<p class="text-xs text-gray-500 mt-1">${field.helpText}</p>` : '';
+    container.innerHTML = '';
 
-        let inputHtml = '';
+    schema.fields.forEach(field => {
+        const wrapper = document.createElement('div');
+
+        const label = document.createElement('label');
+        label.className = 'block text-sm font-medium text-gray-700 mb-1';
+        label.innerText = field.label;
+        wrapper.appendChild(label);
+
+        let input;
         if (field.type === 'select') {
-            const options = field.options.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
-            inputHtml = `<select name="${field.name}" ${field.required ? 'required' : ''} class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none">${options}</select>`;
+            input = document.createElement('select');
+            input.className = 'w-full p-2 border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500';
+            (field.options || []).forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt.value;
+                option.innerText = opt.label;
+                input.appendChild(option);
+            });
         } else if (field.type === 'checkbox') {
-            inputHtml = `
-                <label class="flex items-center space-x-2 cursor-pointer">
-                    <input type="checkbox" name="${field.name}" class="form-checkbox h-4 w-4 text-blue-600">
-                    <span class="text-sm text-gray-700">${field.label}</span>
-                </label>`;
-            return `<div class="p-2 bg-gray-50 rounded">${inputHtml}${helpText}</div>`;
+            const checkboxWrapper = document.createElement('div');
+            checkboxWrapper.className = 'flex items-center bg-gray-50 border border-gray-300 rounded-lg p-2';
+
+            input = document.createElement('input');
+            input.type = 'checkbox';
+            input.id = field.name;
+            input.className = 'mr-2';
+
+            const cbLabel = document.createElement('span');
+            cbLabel.className = 'text-sm text-gray-700';
+            cbLabel.innerText = field.description || '';
+
+            checkboxWrapper.appendChild(input);
+            checkboxWrapper.appendChild(cbLabel);
+            wrapper.appendChild(checkboxWrapper);
+
+            input.name = field.name;
+            if (field.required) input.required = true;
+            container.appendChild(wrapper);
+            return;
+        } else if (field.type === 'textarea') {
+            input = document.createElement('textarea');
+            input.className = 'w-full p-2 border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500';
+            input.rows = field.rows || 4;
+            input.placeholder = field.placeholder || '';
         } else {
-            const type = field.type === 'password' ? 'password' : 'text';
-            inputHtml = `<input type="${type}" name="${field.name}" ${field.required ? 'required' : ''} class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="${field.placeholder || ''}">`;
+            input = document.createElement('input');
+            input.type = field.type === 'password' ? 'password' : 'text';
+            input.className = 'w-full p-2 border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500';
+            input.placeholder = field.placeholder || '';
         }
 
-        return `
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">${field.label} ${requiredMark}</label>
-                ${inputHtml}
-                ${helpText}
-            </div>
-        `;
-    }).join('');
+        input.name = field.name;
+        input.id = field.name;
+        if (field.required) input.required = true;
+        if (field.format) input.dataset.format = field.format;
+
+        wrapper.appendChild(input);
+
+        if (field.description) {
+            const hint = document.createElement('p');
+            hint.className = 'text-xs text-gray-500 mt-1';
+            hint.innerText = field.description;
+            wrapper.appendChild(hint);
+        }
+
+        container.appendChild(wrapper);
+    });
+
+    const form = document.getElementById('user-bound-form');
+    form.addEventListener('submit', handleIssueKey);
 }
 
-async function handleUserBoundSubmit(event) {
-    event.preventDefault();
+async function handleIssueKey(e) {
+    e.preventDefault();
+
     const btn = document.getElementById('issue-btn');
     const originalText = btn.innerText;
-    btn.disabled = true;
     btn.innerText = 'Issuing...';
+    btn.disabled = true;
 
-    const form = event.target;
-    // Extract data
-    const formData = {};
-    // Iterate inputs
-    const inputs = form.querySelectorAll('input, select, textarea');
-    inputs.forEach(input => {
-        if (!input.name) return;
-        if (input.type === 'checkbox') {
-            formData[input.name] = input.checked;
+    const form = e.target;
+    const formData = new FormData(form);
+    const payload = {};
+
+    for (const [k, v] of formData.entries()) {
+        const el = document.getElementById(k);
+        if (el && el.type === 'checkbox') {
+            payload[k] = el.checked;
+        } else if (el && el.dataset && el.dataset.format === 'csv') {
+            payload[k] = String(v).split(',').map(s => s.trim()).filter(Boolean);
         } else {
-            formData[input.name] = input.value;
+            payload[k] = v;
         }
-    });
+    }
 
     try {
         const res = await fetch(`${API_BASE}/api-keys`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(formData)
+            body: JSON.stringify(payload)
         });
+
         const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to issue API key');
+        }
 
-        if (data.error) throw new Error(data.error);
-
-        // Success
-        document.getElementById('user-bound-form').classList.add('hidden');
-        document.getElementById('api-key-result').classList.remove('hidden');
-        document.getElementById('new-api-key-display').innerText = data.apiKey;
-    } catch (e) {
-        alert(e.message || "Failed to issue key");
+        showApiKeyResult(data.apiKey);
+    } catch (err) {
+        alert(err.message);
     } finally {
-        btn.disabled = false;
         btn.innerText = originalText;
+        btn.disabled = false;
     }
 }
 
-function copyNewKey() {
-    const text = document.getElementById('new-api-key-display').innerText;
-    navigator.clipboard.writeText(text).then(() => {
-        alert('Copied key to clipboard!');
-    });
+function showApiKeyResult(apiKey) {
+    document.getElementById('view-config-entry').classList.add('hidden');
+    document.getElementById('api-key-result').classList.remove('hidden');
+
+    const pre = document.getElementById('api-key-value');
+    pre.innerText = apiKey;
+
+    document.getElementById('copy-btn').onclick = async () => {
+        try {
+            await navigator.clipboard.writeText(apiKey);
+            document.getElementById('copy-btn').innerText = 'Copied!';
+            setTimeout(() => (document.getElementById('copy-btn').innerText = 'Copy'), 1500);
+        } catch (e) {
+            alert('Copy failed');
+        }
+    };
+
+    if (redirectUri) {
+        const url = new URL(redirectUri);
+        url.searchParams.set('api_key', apiKey);
+        if (state) url.searchParams.set('state', state);
+        setTimeout(() => {
+            window.location.href = url.toString();
+        }, 500);
+    }
 }
 
 function resetConfigForm() {
-    document.getElementById('user-bound-form').reset();
-    document.getElementById('user-bound-form').classList.remove('hidden');
     document.getElementById('api-key-result').classList.add('hidden');
+    document.getElementById('view-config-entry').classList.remove('hidden');
+    document.getElementById('user-bound-form').reset();
 }
