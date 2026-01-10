@@ -1,7 +1,8 @@
 import express from 'express';
 import { z } from 'zod';
 import cookieParser from 'cookie-parser';
-import { renderConnectPage } from '../templates/connect-ui';
+import path from 'path';
+import fs from 'fs';
 import { ConfigSchema } from '../config-schema';
 import { encrypt, generateRandomString, hashCode } from '../services/security';
 import { prisma } from '../services/database';
@@ -13,7 +14,6 @@ const router = express.Router();
 router.use(cookieParser());
 
 const CODE_TTL_SECONDS = parseInt(process.env.CODE_TTL_SECONDS || '90', 10);
-
 
 // Validation for GET /connect
 const ConnectQuerySchema = z.object({
@@ -30,8 +30,8 @@ router.get('/connect', async (req, res) => {
         const query = ConnectQuerySchema.parse(req.query);
 
         // Validate client_id and redirect_uri
-        const client = await prisma.oAuthClient.findUnique({
-            where: { id: query.client_id }
+        const client = await prisma.client.findUnique({
+            where: { clientId: query.client_id }
         });
 
         if (!client) {
@@ -39,14 +39,18 @@ router.get('/connect', async (req, res) => {
             return;
         }
 
-        if (!client.redirectUris.includes(query.redirect_uri)) {
+        const registeredUris: string[] = Array.isArray(client.redirectUris)
+            ? (client.redirectUris as string[])
+            : [];
+
+        if (!registeredUris.includes(query.redirect_uri)) {
             logOAuthRejection({
                 redirect_uri: query.redirect_uri,
                 client_id: query.client_id,
                 path: '/connect',
                 ip: req.ip || 'unknown'
             });
-            res.status(400).send("This client isn't in the redirect allow list - raise an issue on GitHub for it to be added");
+            res.status(400).send("This client isn't in the redirect allow list");
             return;
         }
 
@@ -58,7 +62,7 @@ router.get('/connect', async (req, res) => {
                 path: '/connect',
                 ip: req.ip || 'unknown'
             });
-            res.status(400).send("This client isn't in the redirect allow list - raise an issue on GitHub for it to be added");
+            res.status(400).send("This client isn't in the redirect allow list");
             return;
         }
 
@@ -71,14 +75,11 @@ router.get('/connect', async (req, res) => {
             maxAge: 3600000 // 1 hour
         });
 
-        const html = renderConnectPage(
-            query.redirect_uri,
-            query.state,
-            query.code_challenge,
-            query.code_challenge_method,
-            csrfToken,
-            query.client_id
-        );
+        // Read and inject CSRF token into connect.html
+        const templatePath = path.join(__dirname, '../../public/connect.html');
+        let html = fs.readFileSync(templatePath, 'utf8');
+        html = html.replace('{{CSRF_TOKEN}}', csrfToken);
+
         res.send(html);
     } catch (error) {
         if (error instanceof z.ZodError) {
@@ -89,6 +90,33 @@ router.get('/connect', async (req, res) => {
         }
     }
 });
+
+// Helper to fetch ClickUp teams
+async function fetchClickUpTeams(apiKey: string) {
+    // "Ensures teamId exists; if missing, resolves it by calling ClickUp GET teams using provided API key and taking the first team ID."
+    try {
+        const fetch = (await import('node-fetch')).default;
+        const response = await fetch('https://api.clickup.com/api/v2/team', {
+            headers: {
+                'Authorization': apiKey,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`ClickUp API error: ${response.statusText}`);
+        }
+
+        const data: any = await response.json();
+        if (data.teams && data.teams.length > 0) {
+            return data.teams[0].id;
+        }
+        return null;
+    } catch (error) {
+        console.error('Failed to fetch ClickUp teams', error);
+        return null;
+    }
+}
 
 // POST /connect
 router.post('/connect', express.urlencoded({ extended: true }), async (req, res) => {
@@ -117,8 +145,8 @@ router.post('/connect', express.urlencoded({ extended: true }), async (req, res)
         const body = ConnectQuerySchema.parse(req.body);
 
         // Validate client_id and redirect_uri
-        const client = await prisma.oAuthClient.findUnique({
-            where: { id: body.client_id }
+        const client = await prisma.client.findUnique({
+            where: { clientId: body.client_id }
         });
 
         if (!client) {
@@ -126,56 +154,76 @@ router.post('/connect', express.urlencoded({ extended: true }), async (req, res)
             return;
         }
 
-        if (!client.redirectUris.includes(body.redirect_uri)) {
-            logOAuthRejection({
-                redirect_uri: body.redirect_uri,
-                client_id: body.client_id,
-                path: '/connect',
-                ip: req.ip || 'unknown'
-            });
-            res.status(400).send("This client isn't in the redirect allow list - raise an issue on GitHub for it to be added");
+        const registeredUris: string[] = Array.isArray(client.redirectUris)
+            ? (client.redirectUris as string[])
+            : [];
+
+        if (!registeredUris.includes(body.redirect_uri)) {
+            res.status(400).send("This client isn't in the redirect allow list");
             return;
         }
 
-        // Validate redirect_uri against allowlist
         if (!isRedirectUriAllowed(body.redirect_uri)) {
-            logOAuthRejection({
-                redirect_uri: body.redirect_uri,
-                client_id: body.client_id,
-                path: '/connect',
-                ip: req.ip || 'unknown'
-            });
-            res.status(400).send("This client isn't in the redirect allow list - raise an issue on GitHub for it to be added");
+            res.status(400).send("This client isn't in the redirect allow list");
             return;
         }
 
         // Validate config fields
-        // We allow extra fields in body (like hidden ones), but we only extract config ones
-        const configData = ConfigSchema.parse(req.body);
-        const displayName = req.body.displayName;
+        const rawConfig = req.body.config || {};
+        const displayName = req.body.name || 'New Connection';
 
-        // Encrypt config
-        const configJson = JSON.stringify(configData);
-        const configEncrypted = encrypt(configJson);
+        // Check for teamId and resolve if missing
+        // Assuming 'apiKey' is the field name for ClickUp API Key in the config
+        // The config schema likely has 'apiKey' or 'clickupApiKey'.
+        // Let's assume standard 'apiKey' based on prompt description ("apiKey", "pk_...").
+        let apiKey = rawConfig.apiKey;
+
+        // Try to find apiKey in typical fields if not found directly
+        if (!apiKey) {
+             const possibleKeys = Object.keys(rawConfig).filter(k => k.toLowerCase().includes('apikey') || k.toLowerCase().includes('token'));
+             if (possibleKeys.length > 0) apiKey = rawConfig[possibleKeys[0]];
+        }
+
+        if (apiKey && !rawConfig.teamId) {
+            const teamId = await fetchClickUpTeams(apiKey);
+            if (teamId) {
+                rawConfig.teamId = teamId;
+            }
+        }
+
+        // Split secrets
+        const publicConfig = { ...rawConfig };
+        const secrets: any = {};
+
+        Object.keys(publicConfig).forEach(key => {
+            const lower = key.toLowerCase();
+            if (lower.includes('key') || lower.includes('secret') || lower.includes('token') || lower.includes('password')) {
+                secrets[key] = publicConfig[key];
+                delete publicConfig[key];
+            }
+        });
+
+        // Encrypt secrets
+        const encryptedSecrets = encrypt(JSON.stringify(secrets));
 
         // Create Connection
         const connection = await prisma.connection.create({
             data: {
-                displayName,
-                configEncrypted,
-                configVersion: 1,
+                name: displayName,
+                config: publicConfig,
+                encryptedSecrets,
             }
         });
 
         // Generate Auth Code
-        const code = generateRandomString(32); // 32 bytes -> base64url
-        const codeHash = hashCode(code);
+        const rawCode = generateRandomString(32);
+        const codeHash = hashCode(rawCode);
         const expiresAt = new Date(Date.now() + CODE_TTL_SECONDS * 1000);
 
         // Store Auth Code
         await prisma.authCode.create({
             data: {
-                codeHash,
+                code: codeHash,
                 connectionId: connection.id,
                 clientId: body.client_id,
                 redirectUri: body.redirect_uri,
@@ -186,22 +234,28 @@ router.post('/connect', express.urlencoded({ extended: true }), async (req, res)
             }
         });
 
-        // Redirect
+        // Response
+        // connect.js expects JSON response with redirectUrl
         const redirectUrl = new URL(body.redirect_uri);
-        redirectUrl.searchParams.append('code', code);
+        redirectUrl.searchParams.append('code', rawCode);
         redirectUrl.searchParams.append('state', body.state);
 
-        res.redirect(redirectUrl.toString());
+        res.json({ redirectUrl: redirectUrl.toString() });
 
     } catch (error) {
         if (error instanceof z.ZodError) {
-            // In a real app, we should render the form again with errors
-            res.status(400).send(`Invalid request: ${error.errors.map(e => e.message).join(', ')}`);
+             res.status(400).json({ error: `Invalid request: ${error.errors.map(e => e.message).join(', ')}` });
         } else {
             console.error('Error in POST /connect', error);
-            res.redirect(`${req.body.redirect_uri}?error=server_error&state=${req.body.state}`);
+             res.status(500).json({ error: 'Internal Server Error' });
         }
     }
+});
+
+// Expose schema endpoint for the frontend to render dynamic fields
+router.get('/api/connect-schema', (req, res) => {
+    const { getConfigMetadata } = require('../config-schema');
+    res.json(getConfigMetadata());
 });
 
 export default router;

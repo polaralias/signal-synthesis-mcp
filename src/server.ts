@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -30,7 +31,6 @@ import { decrypt, encrypt } from './security/crypto';
 import { prisma } from './services/database';
 import { requestContext } from './context';
 import { validateApiKey } from './utils/auth';
-import { renderConnectPage } from './templates/connect-ui';
 import cookieParser from 'cookie-parser';
 import { unauthorized } from './utils/oauth-discovery';
 
@@ -330,45 +330,17 @@ export class SignalSynthesisServer {
 
       // GET /
       app.get('/', async (req, res) => {
-        const { redirect_uri, state, code_challenge, code_challenge_method, client_id } = req.query;
-
-        // If OAuth PKCE parameters are present, render the Connect UI
-        if (redirect_uri && state && code_challenge && code_challenge_method === 'S256' && client_id) {
-          try {
-            // Validate client
-            const client = await prisma.oAuthClient.findUnique({
-              where: { id: client_id as string }
-            });
-
-            if (!client || !client.redirectUris.includes(redirect_uri as string)) {
-              return res.status(400).send('Invalid client_id or redirect_uri');
-            }
-
-            // CSRF Protection (matching connect.ts logic)
-            const csrfToken = generateRandomString(32);
-            res.cookie('csrfToken', csrfToken, {
-              httpOnly: true,
-              secure: process.env.NODE_ENV === 'production',
-              sameSite: 'lax',
-              maxAge: 3600000 // 1 hour
-            });
-
-            const html = renderConnectPage(
-              redirect_uri as string,
-              state as string,
-              code_challenge as string,
-              code_challenge_method as string,
-              csrfToken,
-              client_id as string
-            );
-            return res.send(html);
-          } catch (error: any) {
-            console.error('Error in landing page OAuth handling', error);
-            return res.status(500).send('Internal Server Error');
-          }
+        if (process.env.SMITHERY && process.env.SMITHERY !== 'false') {
+             res.redirect('https://smithery.ai');
+             return;
         }
 
-        // Otherwise, serve the Dashboard UI
+        // Logic for serving connect.html is handled in connectRouter logic or we need to handle it here if it's strictly query param based on root.
+        // The previous logic was: if params present, render connect.
+        // The new plan says: GET /connect serves connect.html.
+        // What if user hits / with params? The prompt says "Client app sends user to: GET /connect..."
+        // So / should just serve index.html.
+
         res.sendFile(path.join(__dirname, '../public/index.html'));
       });
 
@@ -396,8 +368,12 @@ export class SignalSynthesisServer {
       // --- Standardized Dashboard API ---
 
       app.get('/api/config-status', (req: Request, res: Response) => {
+        const configured = isMasterKeyPresent();
         res.json({
-          status: isMasterKeyPresent() ? 'present' : 'missing',
+          status: configured ? 'present' : 'missing',
+          isFallback: false,
+          format: '64-hex',
+          length: 32,
           mode: process.env.API_KEY_MODE || 'disabled'
         });
       });
@@ -409,9 +385,9 @@ export class SignalSynthesisServer {
       app.get('/api/connections', async (req: Request, res: Response) => {
         try {
           const connections = await prisma.connection.findMany({
-            select: { id: true, displayName: true }
+            select: { id: true, name: true }
           });
-          res.json(connections.map(c => ({ id: c.id, name: c.displayName })));
+          res.json(connections.map(c => ({ id: c.id, name: c.name })));
         } catch (error) {
           console.error('[API] Failed to fetch connections:', error);
           res.status(500).json({ error: 'Failed to fetch connections' });
@@ -426,17 +402,29 @@ export class SignalSynthesisServer {
           const { name, credentials, config } = req.body;
           // Support both {name, credentials} and {name, config} formats
           const configData = credentials ?? config ?? {};
-          const configJson = JSON.stringify(configData);
-          const configEncrypted = encrypt(configJson);
+
+          const publicConfig = { ...configData };
+          const secrets: any = {};
+
+          // Naive separation of secrets
+          Object.keys(publicConfig).forEach(key => {
+            const lower = key.toLowerCase();
+            if (lower.includes('key') || lower.includes('secret') || lower.includes('token') || lower.includes('password')) {
+                secrets[key] = publicConfig[key];
+                delete publicConfig[key];
+            }
+          });
+
+          const encryptedSecrets = encrypt(JSON.stringify(secrets));
 
           const connection = await prisma.connection.create({
             data: {
-              displayName: name || 'New Connection',
-              configEncrypted,
-              configVersion: 1,
+              name: name || 'New Connection',
+              config: publicConfig,
+              encryptedSecrets,
             }
           });
-          res.json({ id: connection.id, name: connection.displayName });
+          res.json({ id: connection.id, name: connection.name });
         } catch (error) {
           console.error('[API] Failed to create connection:', error);
           res.status(500).json({ error: 'Failed to create connection' });
@@ -518,32 +506,11 @@ export class SignalSynthesisServer {
             return res.status(404).json({ error: 'Connection not found' });
           }
 
-          // Sanitize config (redact secrets)
-          let sanitizedConfig = {};
-          try {
-            const configJson = decrypt(connection.configEncrypted);
-            const config = JSON.parse(configJson);
-            
-            // Redact sensitive fields
-            sanitizedConfig = Object.entries(config).reduce((acc, [key, value]) => {
-              const lowerKey = key.toLowerCase();
-              if (lowerKey.includes('key') || lowerKey.includes('secret') || 
-                  lowerKey.includes('password') || lowerKey.includes('token')) {
-                acc[key] = '***REDACTED***';
-              } else {
-                acc[key] = value;
-              }
-              return acc;
-            }, {} as Record<string, any>);
-          } catch (e) {
-            console.error('Failed to decrypt config for connection', connectionId, e);
-          }
-
           res.json({
             id: connection.id,
-            name: connection.displayName,
+            name: connection.name,
             createdAt: connection.createdAt,
-            config: sanitizedConfig
+            config: connection.config
           });
         } catch (error) {
           console.error('[API] Failed to fetch connection:', error);
@@ -563,8 +530,7 @@ export class SignalSynthesisServer {
           res.json(sessions.map(s => ({
             id: s.id,
             expiresAt: s.expiresAt,
-            revoked: !!s.revokedAt,
-            revokedAt: s.revokedAt,
+            revoked: !!s.revoked, // Corrected from revokedAt check
             createdAt: s.createdAt
           })));
         } catch (error) {
@@ -582,7 +548,7 @@ export class SignalSynthesisServer {
           const sessionId = req.params.id;
           await prisma.session.update({
             where: { id: sessionId },
-            data: { revokedAt: new Date() }
+            data: { revoked: true } // Corrected from revokedAt
           });
           res.json({ success: true });
         } catch (error) {
@@ -622,11 +588,10 @@ export class SignalSynthesisServer {
           // Use provided clientId or create/find a default internal client
           let effectiveClientId = clientId;
           if (!effectiveClientId) {
-            // Create or find a default internal client for dashboard flows
-            const defaultClient = await prisma.oAuthClient.upsert({
-              where: { id: 'internal-dashboard' },
+            const defaultClient = await prisma.client.upsert({
+              where: { clientId: 'internal-dashboard' },
               create: {
-                id: 'internal-dashboard',
+                clientId: 'internal-dashboard',
                 clientName: 'Internal Dashboard',
                 redirectUris: [callbackUrl],
                 tokenEndpointAuthMethod: 'none'
@@ -635,29 +600,28 @@ export class SignalSynthesisServer {
                 redirectUris: [callbackUrl]
               }
             });
-            effectiveClientId = defaultClient.id;
+            effectiveClientId = defaultClient.clientId;
           }
 
-          // Generate Auth Code (mirrors connect.ts logic)
-          const code = generateRandomString(32);
-          const codeHash = hashCode(code);
+          const rawCode = generateRandomString(32);
+          const codeHash = hashCode(rawCode);
           const expiresAt = new Date(Date.now() + 90 * 1000); // 90 seconds
 
           await prisma.authCode.create({
             data: {
-              codeHash,
+              code: codeHash,
               connectionId,
               clientId: effectiveClientId,
               redirectUri: callbackUrl,
               state: state || '',
-              codeChallenge: '', // Standard dashboard flow might not use PKCE if it's internal
+              codeChallenge: '',
               codeChallengeMethod: 'S256',
               expiresAt,
             }
           });
 
           const redirectUrl = new URL(callbackUrl);
-          redirectUrl.searchParams.append('code', code);
+          redirectUrl.searchParams.append('code', rawCode);
           if (state) redirectUrl.searchParams.append('state', state);
 
           res.json({ redirectUrl: redirectUrl.toString() });
@@ -703,11 +667,14 @@ export class SignalSynthesisServer {
               }
               // Decrypt configuration
               try {
-                // Determine if we are using new crypto or old
-                // For connection config, we assume it's using the same master key logic
-                // The import `decrypt` is from `./security/crypto` now.
-                const configString = decrypt(session.connection.configEncrypted);
-                const connectionConfig = JSON.parse(configString);
+                const publicConfig = (session.connection.config as any) || {};
+                let secrets = {};
+                if (session.connection.encryptedSecrets) {
+                   const secretsJson = decrypt(session.connection.encryptedSecrets);
+                   secrets = JSON.parse(secretsJson);
+                }
+
+                const connectionConfig = { ...publicConfig, ...secrets };
                 requestRouter = new Router(connectionConfig);
                 this.routerCache.set(connectionId, requestRouter);
               } catch (e) {

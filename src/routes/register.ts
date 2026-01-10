@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../services/database";
 import { generateRandomString } from "../services/security";
 import { isRedirectUriAllowed, logOAuthRejection } from "../utils/oauth-utils";
+import { checkRateLimit } from "../services/ratelimit";
 
 const router = express.Router();
 
@@ -16,6 +17,12 @@ const RegisterRequestSchema = z.object({
 
 router.post("/register", express.json(), async (req, res) => {
     try {
+        const ip = req.ip || 'unknown';
+        if (!checkRateLimit(`register:${ip}`, 10, 60)) {
+            res.status(429).json({ error: 'invalid_request', error_description: 'Too Many Requests' });
+            return;
+        }
+
         const body = RegisterRequestSchema.parse(req.body);
 
         // Validate redirect URIs (enforce allowlist)
@@ -47,17 +54,18 @@ router.post("/register", express.json(), async (req, res) => {
 
         const clientId = generateRandomString(32);
 
-        const created = await prisma.oAuthClient.create({
+        // Map request to new Client schema
+        const created = await prisma.client.create({
             data: {
-                id: clientId,
+                clientId: clientId,
                 clientName: body.client_name,
-                redirectUris: body.redirect_uris,
+                redirectUris: body.redirect_uris, // Prisma should handle JSON array automatically
                 tokenEndpointAuthMethod: body.token_endpoint_auth_method ?? "none"
             }
         });
 
         res.status(201).json({
-            client_id: created.id,
+            client_id: created.clientId,
             client_id_issued_at: Math.floor(Date.now() / 1000),
             client_name: created.clientName ?? undefined,
             redirect_uris: created.redirectUris,
