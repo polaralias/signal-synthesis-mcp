@@ -13,7 +13,7 @@ export class ApiKeyService {
 
     async createApiKey(userConfigId: string, ip?: string): Promise<{ apiKey: string, model: ApiKey }> {
         // Prompt requirement: "Generate a raw key mcp_sk_<64 hex chars>, hashes it with SHA-256"
-        const rawKey = 'mcp_sk_' + generateRandomString(32); // 32 bytes -> 64 hex chars
+        const rawKey = 'mcp_sk_' + generateRandomString(64);
         const keyHash = hashToken(rawKey);
 
         const apiKey = await this.prisma.apiKey.create({

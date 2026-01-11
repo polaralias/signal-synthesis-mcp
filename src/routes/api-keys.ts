@@ -1,9 +1,7 @@
 import { Router } from 'express';
-import { z } from 'zod';
 import { ApiKeyService } from '../services/api-key';
 import { UserConfigService } from '../services/user-config';
 import { ConfigSchema } from '../config-schema';
-import { setOauthDiscoveryHeader } from '../utils/oauth-discovery';
 import { checkRateLimit } from '../services/ratelimit';
 
 const router = Router();
@@ -59,46 +57,6 @@ router.post('/api-keys', requireUserBoundMode, async (req, res) => {
         console.error('Failed to issue API key', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
-});
-
-// Get Key Metadata
-router.get('/api-keys/me', async (req, res) => {
-    const token = req.headers.authorization?.replace('Bearer ', '') || req.headers['x-api-key'] as string;
-    if (!token) {
-        setOauthDiscoveryHeader(req, res);
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const key = await apiKeyService.validateApiKey(token);
-    if (!key) {
-        setOauthDiscoveryHeader(req, res);
-        return res.status(401).json({ error: 'Invalid key' });
-    }
-
-    res.json({
-        id: key.id,
-        createdAt: key.createdAt,
-        lastUsedAt: key.lastUsedAt,
-        // name: key.name, // 'name' doesn't exist on ApiKey anymore in my schema
-    });
-});
-
-// Revoke Key
-router.post('/api-keys/revoke', async (req, res) => {
-    const token = req.headers.authorization?.replace('Bearer ', '') || req.headers['x-api-key'] as string;
-    if (!token) {
-        setOauthDiscoveryHeader(req, res);
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const key = await apiKeyService.validateApiKey(token);
-    if (!key) {
-        setOauthDiscoveryHeader(req, res);
-        return res.status(401).json({ error: 'Invalid key' });
-    }
-
-    await apiKeyService.revokeApiKey(key.id);
-    res.json({ success: true, message: 'Key revoked' });
 });
 
 router.get('/config-schema', (req, res) => {

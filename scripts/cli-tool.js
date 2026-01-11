@@ -12,6 +12,11 @@ const command = process.argv[2];
 const subCommand = process.argv[3];
 const arg1 = process.argv[4];
 
+function maskId(value) {
+  if (!value || value.length <= 12) return value;
+  return `${value.slice(0, 6)}...${value.slice(-4)}`;
+}
+
 async function main() {
   if (command === 'connections') {
     if (subCommand === 'list') {
@@ -29,7 +34,7 @@ async function main() {
     if (subCommand === 'list') {
       const keys = await prisma.apiKey.findMany({ include: { userConfig: true } });
       console.table(keys.map(k => ({
-        id: k.id,
+        id: maskId(k.id),
         created: k.createdAt,
         revoked: k.revokedAt,
         configId: k.userConfigId

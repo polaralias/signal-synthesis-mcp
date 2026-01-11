@@ -1,23 +1,11 @@
 import crypto from 'crypto';
+import { getMasterKeyBytes } from './masterKey';
 
 const ALGORITHM = 'aes-256-gcm';
-const MASTER_KEY_HEX = process.env.MASTER_KEY || '';
-
-function getMasterKey(): Buffer {
-    if (!MASTER_KEY_HEX) {
-        throw new Error('MASTER_KEY is not defined');
-    }
-    if (MASTER_KEY_HEX.length === 64) {
-        return Buffer.from(MASTER_KEY_HEX, 'hex');
-    }
-    // Fallback or explicit handling for passphrase could be added here
-    // For now, assuming standard 32-byte key as hex
-    throw new Error('MASTER_KEY must be a 64-character hex string');
-}
 
 export function encrypt(text: string): string {
-    const key = getMasterKey();
-    const iv = crypto.randomBytes(16);
+    const key = getMasterKeyBytes();
+    const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
 
     let encrypted = cipher.update(text, 'utf8', 'hex');
@@ -30,7 +18,7 @@ export function encrypt(text: string): string {
 }
 
 export function decrypt(encryptedText: string): string {
-    const key = getMasterKey();
+    const key = getMasterKeyBytes();
     const parts = encryptedText.split(':');
     if (parts.length !== 3) {
         throw new Error('Invalid encrypted text format');

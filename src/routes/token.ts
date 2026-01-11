@@ -24,7 +24,7 @@ router.post('/token', express.json(), express.urlencoded({ extended: true }), as
             return;
         }
         const ip = req.ip || 'unknown';
-        if (!checkRateLimit(`token:${ip}`, 10, 60)) {
+        if (!checkRateLimit(`token:${ip}`, 20, 60)) {
             res.status(429).json({ error: 'invalid_request', error_description: 'Too Many Requests' });
             return;
         }
@@ -90,15 +90,8 @@ router.post('/token', express.json(), express.urlencoded({ extended: true }), as
         // "Create session access token <id>:<secret> and store bcrypt hash of secret."
         // "Return bearer token payload with expires_in."
 
-        const sessionId = generateRandomString(16); // UUID-like? Schema says UUID.
-        // Schema for Session.id is UUID.
-        // Let's use crypto.randomUUID() if available or just let DB generate ID if we can get it back first.
-        // Actually, if format is <sessionId>:<secret>, we need sessionId first.
-        // Or we create session, get ID, then return token.
-
-        // Let's create session first.
-        const secret = generateRandomString(64);
-        const tokenHash = await hashToken(secret);
+        const token = generateRandomString(32);
+        const tokenHash = await hashToken(token);
         const expiresAt = new Date(Date.now() + TOKEN_TTL_SECONDS * 1000);
 
         const session = await prisma.session.create({
@@ -109,10 +102,8 @@ router.post('/token', express.json(), express.urlencoded({ extended: true }), as
             }
         });
 
-        const accessToken = `${session.id}:${secret}`;
-
         res.json({
-            access_token: accessToken,
+            access_token: token,
             token_type: 'Bearer',
             expires_in: TOKEN_TTL_SECONDS
         });

@@ -3,7 +3,6 @@ import { z } from 'zod';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import fs from 'fs';
-import { ConfigSchema } from '../config-schema';
 import { encrypt, generateRandomString, hashCode } from '../services/security';
 import { prisma } from '../services/database';
 import { checkRateLimit } from '../services/ratelimit';
@@ -18,7 +17,7 @@ const CODE_TTL_SECONDS = parseInt(process.env.CODE_TTL_SECONDS || '90', 10);
 // Validation for GET /connect
 const ConnectQuerySchema = z.object({
     redirect_uri: z.string().url(),
-    state: z.string(),
+    state: z.string().optional(),
     code_challenge: z.string(),
     code_challenge_method: z.literal('S256'),
     client_id: z.string().min(1),
@@ -68,15 +67,15 @@ router.get('/connect', async (req, res) => {
 
         // CSRF Protection
         const csrfToken = generateRandomString(32);
-        res.cookie('csrfToken', csrfToken, {
+        res.cookie('csrf_token', csrfToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
+            sameSite: 'strict',
             maxAge: 3600000 // 1 hour
         });
 
         // Read and inject CSRF token into connect.html
-        const templatePath = path.join(__dirname, '../../public/connect.html');
+        const templatePath = path.join(process.cwd(), 'src', 'public', 'connect.html');
         let html = fs.readFileSync(templatePath, 'utf8');
         html = html.replace('{{CSRF_TOKEN}}', csrfToken);
 
@@ -91,35 +90,8 @@ router.get('/connect', async (req, res) => {
     }
 });
 
-// Helper to fetch ClickUp teams
-async function fetchClickUpTeams(apiKey: string) {
-    // "Ensures teamId exists; if missing, resolves it by calling ClickUp GET teams using provided API key and taking the first team ID."
-    try {
-        const fetch = (await import('node-fetch')).default;
-        const response = await fetch('https://api.clickup.com/api/v2/team', {
-            headers: {
-                'Authorization': apiKey,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`ClickUp API error: ${response.statusText}`);
-        }
-
-        const data: any = await response.json();
-        if (data.teams && data.teams.length > 0) {
-            return data.teams[0].id;
-        }
-        return null;
-    } catch (error) {
-        console.error('Failed to fetch ClickUp teams', error);
-        return null;
-    }
-}
-
 // POST /connect
-router.post('/connect', express.urlencoded({ extended: true }), async (req, res) => {
+router.post('/connect', express.json(), express.urlencoded({ extended: true }), async (req, res) => {
     try {
         if (!isMasterKeyPresent()) {
             res.status(403).send('MASTER_KEY is not configured. Sensitive operations are blocked.');
@@ -133,8 +105,8 @@ router.post('/connect', express.urlencoded({ extended: true }), async (req, res)
         }
 
         // CSRF Verification
-        const csrfCookie = req.cookies.csrfToken;
-        const csrfBody = req.body.csrfToken;
+        const csrfCookie = req.cookies.csrf_token;
+        const csrfBody = req.body.csrf_token;
 
         if (!csrfCookie || !csrfBody || csrfCookie !== csrfBody) {
             res.status(403).send('Invalid CSRF token');
@@ -169,27 +141,15 @@ router.post('/connect', express.urlencoded({ extended: true }), async (req, res)
         }
 
         // Validate config fields
-        const rawConfig = req.body.config || {};
-        const displayName = req.body.name || 'New Connection';
-
-        // Check for teamId and resolve if missing
-        // Assuming 'apiKey' is the field name for ClickUp API Key in the config
-        // The config schema likely has 'apiKey' or 'clickupApiKey'.
-        // Let's assume standard 'apiKey' based on prompt description ("apiKey", "pk_...").
-        let apiKey = rawConfig.apiKey;
-
-        // Try to find apiKey in typical fields if not found directly
-        if (!apiKey) {
-             const possibleKeys = Object.keys(rawConfig).filter(k => k.toLowerCase().includes('apikey') || k.toLowerCase().includes('token'));
-             if (possibleKeys.length > 0) apiKey = rawConfig[possibleKeys[0]];
-        }
-
-        if (apiKey && !rawConfig.teamId) {
-            const teamId = await fetchClickUpTeams(apiKey);
-            if (teamId) {
-                rawConfig.teamId = teamId;
+        let rawConfig: any = req.body.config || {};
+        if (typeof rawConfig === 'string') {
+            try {
+                rawConfig = JSON.parse(rawConfig);
+            } catch {
+                rawConfig = {};
             }
         }
+        const displayName = req.body.name || 'New Connection';
 
         // Split secrets
         const publicConfig = { ...rawConfig };
@@ -238,7 +198,9 @@ router.post('/connect', express.urlencoded({ extended: true }), async (req, res)
         // connect.js expects JSON response with redirectUrl
         const redirectUrl = new URL(body.redirect_uri);
         redirectUrl.searchParams.append('code', rawCode);
-        redirectUrl.searchParams.append('state', body.state);
+        if (body.state) {
+            redirectUrl.searchParams.append('state', body.state);
+        }
 
         res.json({ redirectUrl: redirectUrl.toString() });
 
