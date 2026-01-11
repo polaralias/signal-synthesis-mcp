@@ -1,4 +1,3 @@
-# Smithery MCP Server
 # Use Node.js LTS (Long Term Support) as the base image
 # Upgraded to node:22-slim to satisfy Prisma 7.2.0 requirements (Node >= 20.19)
 FROM node:22-slim AS builder

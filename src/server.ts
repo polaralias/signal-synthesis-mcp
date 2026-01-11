@@ -330,11 +330,6 @@ export class SignalSynthesisServer {
 
       // GET /
       app.get('/', async (req, res) => {
-        if (process.env.SMITHERY && process.env.SMITHERY !== 'false') {
-             res.redirect('https://smithery.ai');
-             return;
-        }
-
         // Logic for serving connect.html is handled in connectRouter logic or we need to handle it here if it's strictly query param based on root.
         // The previous logic was: if params present, render connect.
         // The new plan says: GET /connect serves connect.html.
@@ -410,8 +405,8 @@ export class SignalSynthesisServer {
           Object.keys(publicConfig).forEach(key => {
             const lower = key.toLowerCase();
             if (lower.includes('key') || lower.includes('secret') || lower.includes('token') || lower.includes('password')) {
-                secrets[key] = publicConfig[key];
-                delete publicConfig[key];
+              secrets[key] = publicConfig[key];
+              delete publicConfig[key];
             }
           });
 
@@ -498,8 +493,8 @@ export class SignalSynthesisServer {
       app.get('/api/connections/:id', async (req: Request, res: Response) => {
         try {
           const connectionId = req.params.id;
-          const connection = await prisma.connection.findUnique({ 
-            where: { id: connectionId } 
+          const connection = await prisma.connection.findUnique({
+            where: { id: connectionId }
           });
 
           if (!connection) {
@@ -670,8 +665,8 @@ export class SignalSynthesisServer {
                 const publicConfig = (session.connection.config as any) || {};
                 let secrets = {};
                 if (session.connection.encryptedSecrets) {
-                   const secretsJson = decrypt(session.connection.encryptedSecrets);
-                   secrets = JSON.parse(secretsJson);
+                  const secretsJson = decrypt(session.connection.encryptedSecrets);
+                  secrets = JSON.parse(secretsJson);
                 }
 
                 const connectionConfig = { ...publicConfig, ...secrets };
